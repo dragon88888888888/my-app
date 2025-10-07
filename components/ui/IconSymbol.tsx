@@ -33,6 +33,7 @@ const MAPPING = {
   'heart': 'favorite-border',
   'share': 'share',
   'magnifyingglass': 'search',
+  'sparkles': 'auto-awesome',
 } as IconMapping;
 
 /**

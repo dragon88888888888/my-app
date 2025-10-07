@@ -1,91 +1,117 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ImageBackground } from 'react-native';
-import { router } from 'expo-router';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
-const pastTripsData = [
-  {
-    id: 1,
-    destination: 'Tokyo',
-    country: 'Japan',
-    dates: ' - 14 mar - 24 mar',
-    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
-  },
-  {
-    id: 2,
-    destination: 'Barcelona',
-    country: 'Spain',
-    dates: ' - 9 sept - 19 sept',
-    image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=800&q=80',
-  },
-];
+interface Message {
+  id: number;
+  text: string;
+  sender: 'user' | 'bot';
+  timestamp: Date;
+}
 
-export default function PastTripsScreen() {
-  const handleNewTrip = () => {
-    router.push('/recommendations');
-  };
+export default function ChatScreen() {
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<Message[]>([]);
 
-  const handleTripDetail = (trip: any) => {
-    router.push({
-      pathname: '/past-trip-detail',
-      params: {
-        tripId: trip.id,
-        tripData: JSON.stringify(trip)
-      }
-    });
+  const handleSendMessage = () => {
+    if (message.trim()) {
+      const newUserMessage: Message = {
+        id: Date.now(),
+        text: message,
+        sender: 'user',
+        timestamp: new Date(),
+      };
+      
+      setMessages(prev => [...prev, newUserMessage]);
+      setMessage('');
+
+      // Simulate bot response
+      setTimeout(() => {
+        const botResponse: Message = {
+          id: Date.now() + 1,
+          text: 'Gracias por tu pregunta. Como asistente de viajes, puedo ayudarte con destinos, consejos de viaje y planificación. ¿Hay algo específico que te gustaría saber?',
+          sender: 'bot',
+          timestamp: new Date(),
+        };
+        setMessages(prev => [...prev, botResponse]);
+      }, 1000);
+    }
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView 
+      style={styles.container} 
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
+      
       <View style={styles.header}>
-        <Text style={styles.title}>Mis Viajes</Text>
-        <Text style={styles.subtitle}>Tu cartera de experiencias</Text>
+        <Text style={styles.title}>Nova AI</Text>
+        <Text style={styles.subtitle}>Preguntame todo sobre tu viaje</Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Historial de Viajes</Text>
-          
-          <View style={styles.tripsContainer}>
-            {pastTripsData.map((trip) => (
-              <TouchableOpacity
-                key={trip.id}
-                style={styles.tripCard}
-                onPress={() => handleTripDetail(trip)}
-              >
-                <ImageBackground
-                  source={{ uri: trip.image }}
-                  style={styles.tripCardBackground}
-                  imageStyle={styles.tripCardImage}
-                >
-                  <View style={styles.tripCardOverlay}>
-                    <View style={styles.tripHeader}>
-                      <View />
-                      <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
-                    </View>
-
-                    <View>
-                      <Text style={styles.tripDestination}>{trip.destination}</Text>
-                      <View style={styles.tripCountryRow}>
-                        <Text style={styles.tripCountry}>{trip.country}</Text>
-                        <Text style={styles.tripDates}>{trip.dates}</Text>
-                      </View>
-                    </View>
-                  </View>
-                </ImageBackground>
-              </TouchableOpacity>
-            ))}
+      <View style={styles.contentContainer}>
+        {messages.length === 0 ? (
+          <View style={styles.emptyStateContainer}>
+            <Text style={styles.emptyStateTitle}>Inicia una conversación</Text>
+            <Text style={styles.emptyStateSubtitle}>
+              Preguntame sobre tus viajes, destinos{'\n'}tips, o cualuier duda relacionada
+            </Text>
           </View>
-        </View>
+        ) : (
+          <ScrollView 
+            style={styles.messagesContainer}
+            showsVerticalScrollIndicator={false}
+          >
+            {messages.map((msg) => (
+              <View 
+                key={msg.id} 
+                style={[
+                  styles.messageContainer,
+                  msg.sender === 'user' ? styles.userMessage : styles.botMessage
+                ]}
+              >
+                <Text style={[
+                  styles.messageText,
+                  msg.sender === 'user' ? styles.userMessageText : styles.botMessageText
+                ]}>
+                  {msg.text}
+                </Text>
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
 
-        <TouchableOpacity style={styles.newTripButton} onPress={handleNewTrip}>
-          <IconSymbol name="plus" size={24} color="#FFFFFF" />
-          <Text style={styles.newTripText}>Agregar Viaje</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
+      <View style={styles.inputContainer}>
+        <View style={styles.inputWrapper}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="Preguntame sobre tus viajes ..."
+            placeholderTextColor="#9CA3AF"
+            value={message}
+            onChangeText={setMessage}
+            multiline
+            maxLength={500}
+          />
+          <TouchableOpacity 
+            style={[
+              styles.sendButton,
+              message.trim() ? styles.sendButtonActive : styles.sendButtonInactive
+            ]}
+            onPress={handleSendMessage}
+            disabled={!message.trim()}
+          >
+            <IconSymbol 
+              name="paperplane.fill" 
+              size={18} 
+              color={message.trim() ? '#FFFFFF' : '#9CA3AF'} 
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -98,6 +124,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
   },
   title: {
     fontSize: 32,
@@ -109,86 +137,93 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
   },
-  content: {
+  contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
   },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 16,
-  },
-  tripsContainer: {
-    gap: 16,
-  },
-  tripCard: {
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 0,
-  },
-  tripCardBackground: {
-    width: '100%',
-    minHeight: 200,
-  },
-  tripCardImage: {
-    borderRadius: 12,
-  },
-  tripCardOverlay: {
+  emptyStateContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    padding: 20,
-    justifyContent: 'space-between',
-  },
-  tripHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingHorizontal: 40,
   },
-  tripDestination: {
+  emptyStateTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  tripCountryRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-start',
-    alignItems: 'center',
-  },
-  tripCountry: {
+  emptyStateSubtitle: {
     fontSize: 16,
-    color: '#E5E7EB',
+    color: '#6B7280',
+    textAlign: 'center',
+    lineHeight: 24,
   },
-  tripDates: {
-    fontSize: 14,
-    color: '#E5E7EB',
-    fontWeight: '500',
-  },
-  tripPrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  newTripButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#000000',
+  messagesContainer: {
+    flex: 1,
     paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    gap: 8,
-    marginTop: 20,
-    marginBottom: 40,
   },
-  newTripText: {
-    color: '#FFFFFF',
+  messageContainer: {
+    marginVertical: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 18,
+    maxWidth: '80%',
+  },
+  userMessage: {
+    backgroundColor: '#000000',
+    alignSelf: 'flex-end',
+    marginLeft: '20%',
+  },
+  botMessage: {
+    backgroundColor: '#F3F4F6',
+    alignSelf: 'flex-start',
+    marginRight: '20%',
+  },
+  messageText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    lineHeight: 20,
+  },
+  userMessageText: {
+    color: '#FFFFFF',
+  },
+  botMessageText: {
+    color: '#111827',
+  },
+  inputContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  textInput: {
+    flex: 1,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    maxHeight: 100,
+    color: '#111827',
+  },
+  sendButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  sendButtonActive: {
+    backgroundColor: '#000000',
+  },
+  sendButtonInactive: {
+    backgroundColor: '#E5E7EB',
   },
 });

@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInUp, useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import { TripsService } from '@/lib/tripsService';
 import { LegacyTrip } from '@/lib/supabase';
 import RecommendationsQuestionnaire from '@/components/RecommendationsQuestionnaire';
@@ -15,42 +15,55 @@ export default function RecommendationsScreen() {
   const [trips, setTrips] = useState<LegacyTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showQuestionnaire, setShowQuestionnaire] = useState(true);
+  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
   const [questionnaireAnswers, setQuestionnaireAnswers] = useState<{ [key: number]: string } | null>(null);
-  const [checkingPreferences, setCheckingPreferences] = useState(true);
   const [likedTrips, setLikedTrips] = useState<Set<number>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showAIButton, setShowAIButton] = useState(false);
+  const [hasShownAIButton, setHasShownAIButton] = useState(false);
+
+  const aiButtonOpacity = useSharedValue(0);
+  const aiButtonTranslateY = useSharedValue(100);
+  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     loadTrips();
-    checkUserPreferences();
   }, []);
 
-  const checkUserPreferences = async () => {
-    if (!user) {
-      setCheckingPreferences(false);
-      return;
+  useEffect(() => {
+    if (showAIButton) {
+      // Mostrar botón con animación
+      aiButtonOpacity.value = withTiming(1, { duration: 400 });
+      aiButtonTranslateY.value = withSpring(0, {
+        damping: 15,
+        stiffness: 100,
+      });
+
+      // Ocultar después de 15 segundos
+      hideTimeoutRef.current = setTimeout(() => {
+        hideAIButton();
+      }, 15000);
+    } else {
+      // Ocultar botón con animación
+      aiButtonOpacity.value = withTiming(0, { duration: 300 });
+      aiButtonTranslateY.value = withTiming(100, { duration: 300 });
     }
 
-    try {
-      const supabaseUser = await UserService.getUserByClerkId(user.id);
-
-      if (supabaseUser) {
-        const preferences = await UserService.getTravelPreferences(supabaseUser.id);
-
-        if (preferences && preferences.completed) {
-          // Usuario ya completó el cuestionario, no mostrarlo
-          setShowQuestionnaire(false);
-          console.log('✅ Usuario ya completó el cuestionario de recomendaciones');
-        } else {
-          // Usuario no ha completado el cuestionario
-          setShowQuestionnaire(true);
-        }
+    return () => {
+      if (hideTimeoutRef.current) {
+        clearTimeout(hideTimeoutRef.current);
       }
-    } catch (error) {
-      console.error('Error checking preferences:', error);
-    } finally {
-      setCheckingPreferences(false);
-    }
+    };
+  }, [showAIButton]);
+
+  const hideAIButton = () => {
+    setShowAIButton(false);
+    setHasShownAIButton(true); // Marcar que ya se mostró
+  };
+
+  const handleExploreWithAI = () => {
+    setShowQuestionnaire(true);
   };
 
   const loadTrips = async () => {
@@ -94,30 +107,126 @@ export default function RecommendationsScreen() {
     });
   };
 
-  // Mostrar loading mientras verifica si ya completó el cuestionario
-  if (checkingPreferences) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#000000" />
-        <Text style={styles.loadingText}>Verificando perfil...</Text>
-      </View>
-    );
-  }
+  const handleScroll = (event: any) => {
+    const scrollY = event.nativeEvent.contentOffset.y;
+
+    // Mostrar botón después de hacer scroll de 100px (solo si no se ha mostrado antes)
+    if (scrollY > 100 && !showAIButton && !hasShownAIButton) {
+      setShowAIButton(true);
+    }
+  };
+
+  const aiButtonStyle = useAnimatedStyle(() => {
+    return {
+      opacity: aiButtonOpacity.value,
+      transform: [{ translateY: aiButtonTranslateY.value }],
+    };
+  });
 
   if (showQuestionnaire) {
     return <RecommendationsQuestionnaire onComplete={handleQuestionnaireComplete} />;
   }
 
-  return (
-    <Animated.View style={styles.container} entering={FadeIn.duration(300)}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
-      <Animated.View style={styles.header} entering={SlideInUp.duration(200).delay(100)}>
-        <Text style={styles.title}>Viajes Posibles</Text>
-        <Text style={styles.subtitle}>Descubre tu próximo destino</Text>
-      </Animated.View>
+  const filteredTrips = trips.filter(trip => {
+    const matchesSearch = trip.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      trip.destinations.some(dest => dest.toLowerCase().includes(searchQuery.toLowerCase()));
 
-      <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+    if (selectedCategory === 'all') return matchesSearch;
+
+    // Si se selecciona "Me gusta", mostrar solo los viajes con like
+    if (selectedCategory === 'liked') {
+      return matchesSearch && likedTrips.has(trip.id);
+    }
+
+    const matchesCategory = trip.tags.some(tag =>
+      tag.toLowerCase().includes(selectedCategory.toLowerCase())
+    );
+
+    return matchesSearch && matchesCategory;
+  });
+
+  return (
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Explora</Text>
+          <Text style={styles.subtitle}>Encuentra tu destino ideal</Text>
+        </View>
+        <TouchableOpacity style={styles.aiIconButton} onPress={handleExploreWithAI}>
+          <IconSymbol name="sparkles" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <IconSymbol name="magnifyingglass" size={20} color="#9CA3AF" />
+        <Text style={styles.searchInput}>Busca tu destino soñado...</Text>
+      </View>
+
+      {/* Category Filters */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.categoriesContainer}
+        contentContainerStyle={styles.categoriesContent}
+      >
+        <TouchableOpacity
+          style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
+          onPress={() => setSelectedCategory('all')}
+        >
+          <IconSymbol
+            name="location.fill"
+            size={16}
+            color={selectedCategory === 'all' ? '#FFFFFF' : '#374151'}
+          />
+          <Text style={[styles.categoryText, selectedCategory === 'all' && styles.categoryTextActive]}>
+            Todos
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.categoryChip, selectedCategory === 'liked' && styles.categoryChipActive]}
+          onPress={() => setSelectedCategory('liked')}
+        >
+          <IconSymbol
+            name="heart"
+            size={16}
+            color={selectedCategory === 'liked' ? '#FFFFFF' : '#374151'}
+          />
+          <Text style={[styles.categoryText, selectedCategory === 'liked' && styles.categoryTextActive]}>
+            Me gusta
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.categoryChip, selectedCategory === 'adventure' && styles.categoryChipActive]}
+          onPress={() => setSelectedCategory('adventure')}
+        >
+          <IconSymbol
+            name="leaf.fill"
+            size={16}
+            color={selectedCategory === 'adventure' ? '#FFFFFF' : '#374151'}
+          />
+          <Text style={[styles.categoryText, selectedCategory === 'adventure' && styles.categoryTextActive]}>
+            Aventura
+          </Text>
+        </TouchableOpacity>
+
+        
+      </ScrollView>
+
+      <ScrollView
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+      >
+        <Text style={styles.resultsText}>
+          {filteredTrips.length} destinos encontrados
+        </Text>
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#000000" />
@@ -130,17 +239,13 @@ export default function RecommendationsScreen() {
               <Text style={styles.retryButtonText}>Reintentar</Text>
             </TouchableOpacity>
           </View>
-        ) : trips.length === 0 ? (
+        ) : filteredTrips.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyText}>No se encontraron viajes disponibles</Text>
           </View>
         ) : (
-          trips.map((trip, index) => (
-            <Animated.View
-              key={trip.id}
-              style={styles.card}
-              entering={SlideInUp.duration(250).delay(100 + index * 30)}
-            >
+          filteredTrips.map((trip, index) => (
+            <View key={trip.id} style={styles.card}>
               <View style={styles.imageContainer}>
                 <Image
                   source={{
@@ -199,43 +304,116 @@ export default function RecommendationsScreen() {
                   <Text style={styles.selectButtonText}>Ver Viaje</Text>
                 </TouchableOpacity>
               </View>
-            </Animated.View>
+            </View>
           ))
         )}
       </ScrollView>
-    </Animated.View>
+
+      {/* Floating AI Button - Animated */}
+      <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle]}>
+        <TouchableOpacity style={styles.aiButton} onPress={handleExploreWithAI}>
+          <IconSymbol name="magnifyingglass" size={20} color="#FFFFFF" />
+          <Text style={styles.aiButtonText}>Explorar Viaje con IA</Text>
+          <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
-  },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 20,
     backgroundColor: '#FFFFFF',
   },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 16,
+  },
+  aiIconButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6B7280',
+    fontSize: 15,
+    color: '#9CA3AF',
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    marginHorizontal: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 25,
+    gap: 12,
+    marginBottom: 16,
+  },
+  searchInput: {
+    fontSize: 15,
+    color: '#9CA3AF',
+  },
+  categoriesContainer: {
+    marginBottom: 20,
+    maxHeight: 40,
+  },
+  categoriesContent: {
+    paddingHorizontal: 24,
+    gap: 8,
+    flexDirection: 'row',
+  },
+  categoryChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  categoryChipActive: {
+    backgroundColor: '#000000',
+  },
+  categoryText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  categoryTextActive: {
+    color: '#FFFFFF',
   },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
+  resultsText: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    marginBottom: 16,
   },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
-    marginBottom: 24,
+    marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -262,28 +440,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   cardContent: {
-    padding: 24,
+    padding: 20,
   },
   cardTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 4,
   },
   cardLocation: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#6B7280',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   cardDescription: {
     fontSize: 14,
     color: '#374151',
     lineHeight: 20,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   cardInfo: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   infoItem: {
     flexDirection: 'row',
@@ -299,7 +477,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   tag: {
     backgroundColor: '#E5E7EB',
@@ -319,6 +497,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   selectButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  floatingButtonContainer: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    right: 24,
+  },
+  aiButton: {
+    flexDirection: 'row',
+    backgroundColor: '#000000',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  aiButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',

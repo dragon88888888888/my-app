@@ -36,11 +36,11 @@ export default function AnimatedTabBar({ state, descriptors, navigation }: TabBa
 
     switch (routeName) {
       case 'index':
-        return <IconSymbol name="location.fill" {...iconProps} />;
+        return <IconSymbol name="message.circle" {...iconProps} />;
       case 'recommendations':
         return <IconSymbol name="magnifyingglass" {...iconProps} />;
-      case 'chat':
-        return <IconSymbol name="message.circle" {...iconProps} />;
+      case 'viajes':
+        return <IconSymbol name="location.fill" {...iconProps} />;
       case 'profile':
         return <IconSymbol name="person.fill" {...iconProps} />;
       default:

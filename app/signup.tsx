@@ -1,17 +1,35 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
-import { useSignUp } from '@clerk/clerk-expo';
+import { useSignUp, useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
+  const { signOut, isSignedIn } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [pendingVerification, setPendingVerification] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Cerrar sesión si el usuario ya está autenticado
+  useEffect(() => {
+    const handleSignOut = async () => {
+      if (isSignedIn) {
+        try {
+          await signOut();
+          console.log('✅ Sesión anterior cerrada en signup');
+        } catch (error) {
+          console.error('Error al cerrar sesión anterior:', error);
+        }
+      }
+    };
+
+    handleSignOut();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSignUp = async () => {
     if (!isLoaded) return;

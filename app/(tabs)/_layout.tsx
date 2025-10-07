@@ -13,8 +13,8 @@ export default function TabLayout() {
           headerShown: false,
           animation: 'shift',
         }}>
-          <Tabs.Screen
-          name="chat"
+        <Tabs.Screen
+          name="index"
           options={{
             title: 'Chat',
           }}
@@ -26,13 +26,11 @@ export default function TabLayout() {
           }}
         />
         <Tabs.Screen
-          name="index"
+          name="viajes"
           options={{
             title: 'Viajes',
           }}
         />
-        
-        
         <Tabs.Screen
           name="profile"
           options={{
