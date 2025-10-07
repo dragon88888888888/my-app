@@ -1,75 +1,194 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ImageBackground } from 'react-native';
+import { router } from 'expo-router';
+import { IconSymbol } from '@/components/ui/IconSymbol';
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+const pastTripsData = [
+  {
+    id: 1,
+    destination: 'Tokyo',
+    country: 'Japan',
+    dates: ' - 14 mar - 24 mar',
+    image: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80',
+  },
+  {
+    id: 2,
+    destination: 'Barcelona',
+    country: 'Spain',
+    dates: ' - 9 sept - 19 sept',
+    image: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?w=800&q=80',
+  },
+];
 
-export default function HomeScreen() {
+export default function PastTripsScreen() {
+  const handleNewTrip = () => {
+    router.push('/recommendations');
+  };
+
+  const handleTripDetail = (trip: any) => {
+    router.push({
+      pathname: '/past-trip-detail',
+      params: {
+        tripId: trip.id,
+        tripData: JSON.stringify(trip)
+      }
+    });
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      <View style={styles.header}>
+        <Text style={styles.title}>Mis Viajes</Text>
+        <Text style={styles.subtitle}>Tu cartera de experiencias</Text>
+      </View>
+
+      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Historial de Viajes</Text>
+          
+          <View style={styles.tripsContainer}>
+            {pastTripsData.map((trip) => (
+              <TouchableOpacity
+                key={trip.id}
+                style={styles.tripCard}
+                onPress={() => handleTripDetail(trip)}
+              >
+                <ImageBackground
+                  source={{ uri: trip.image }}
+                  style={styles.tripCardBackground}
+                  imageStyle={styles.tripCardImage}
+                >
+                  <View style={styles.tripCardOverlay}>
+                    <View style={styles.tripHeader}>
+                      <View />
+                      <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+                    </View>
+
+                    <View>
+                      <Text style={styles.tripDestination}>{trip.destination}</Text>
+                      <View style={styles.tripCountryRow}>
+                        <Text style={styles.tripCountry}>{trip.country}</Text>
+                        <Text style={styles.tripDates}>{trip.dates}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </ImageBackground>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <TouchableOpacity style={styles.newTripButton} onPress={handleNewTrip}>
+          <IconSymbol name="plus" size={24} color="#FFFFFF" />
+          <Text style={styles.newTripText}>Agregar Viaje</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: '#6B7280',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 24,
+  },
+  section: {
+    marginBottom: 32,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 16,
+  },
+  tripsContainer: {
+    gap: 16,
+  },
+  tripCard: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 0,
+  },
+  tripCardBackground: {
+    width: '100%',
+    minHeight: 200,
+  },
+  tripCardImage: {
+    borderRadius: 12,
+  },
+  tripCardOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    padding: 20,
+    justifyContent: 'space-between',
+  },
+  tripHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  tripDestination: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  tripCountryRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  tripCountry: {
+    fontSize: 16,
+    color: '#E5E7EB',
+  },
+  tripDates: {
+    fontSize: 14,
+    color: '#E5E7EB',
+    fontWeight: '500',
+  },
+  tripPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  newTripButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
     gap: 8,
+    marginTop: 20,
+    marginBottom: 40,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  newTripText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
