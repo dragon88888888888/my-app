@@ -1,38 +1,15 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image } from 'react-native';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import AuthGuard from '@/components/AuthGuard';
-import { useAuth } from '@clerk/clerk-expo';
 
 export default function OnboardingScreen() {
-  const { signOut, isSignedIn } = useAuth();
-
-  // Cerrar sesión automáticamente cuando el usuario llega a esta pantalla
-  // Solo ejecutar UNA vez al montar el componente
-  useEffect(() => {
-    const logout = async () => {
-      if (isSignedIn) {
-        try {
-          await signOut();
-          console.log('✅ Sesión cerrada automáticamente');
-        } catch (error) {
-          console.error('Error al cerrar sesión:', error);
-        }
-      }
-    };
-
-    logout();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Array vacío = solo se ejecuta una vez al montar
-
   const handleComenzar = () => {
     router.push('/cuestionario');
   };
 
   return (
-    <AuthGuard requireAuth={false}>
-      <View style={styles.container}>
+    <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
         <View style={styles.content}>
@@ -63,7 +40,6 @@ export default function OnboardingScreen() {
           </View>
         </View>
       </View>
-    </AuthGuard>
   );
 }
 
