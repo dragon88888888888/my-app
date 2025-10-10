@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -22,10 +22,20 @@ export default function RecommendationsScreen() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAIButton, setShowAIButton] = useState(false);
   const [hasShownAIButton, setHasShownAIButton] = useState(false);
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
 
   const aiButtonOpacity = useSharedValue(0);
   const aiButtonTranslateY = useSharedValue(100);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const filterCategories = [
+    { id: 'adventure', label: 'Aventura', icon: 'leaf.fill' },
+    { id: 'culture', label: 'Cultura', icon: 'sparkles' },
+    { id: 'beach', label: 'Playa', icon: 'location.fill' },
+    { id: 'mountain', label: 'Montaña', icon: 'location.fill' },
+    { id: 'city', label: 'Ciudad', icon: 'location.fill' },
+    { id: 'spiritual', label: 'Espiritual', icon: 'sparkles' },
+  ];
 
   useEffect(() => {
     loadTrips();
@@ -33,19 +43,16 @@ export default function RecommendationsScreen() {
 
   useEffect(() => {
     if (showAIButton) {
-      // Mostrar botón con animación
       aiButtonOpacity.value = withTiming(1, { duration: 400 });
       aiButtonTranslateY.value = withSpring(0, {
         damping: 15,
         stiffness: 100,
       });
 
-      // Ocultar después de 15 segundos
       hideTimeoutRef.current = setTimeout(() => {
         hideAIButton();
       }, 15000);
     } else {
-      // Ocultar botón con animación
       aiButtonOpacity.value = withTiming(0, { duration: 300 });
       aiButtonTranslateY.value = withTiming(100, { duration: 300 });
     }
@@ -59,7 +66,7 @@ export default function RecommendationsScreen() {
 
   const hideAIButton = () => {
     setShowAIButton(false);
-    setHasShownAIButton(true); // Marcar que ya se mostró
+    setHasShownAIButton(true);
   };
 
   const handleExploreWithAI = () => {
@@ -110,7 +117,6 @@ export default function RecommendationsScreen() {
   const handleScroll = (event: any) => {
     const scrollY = event.nativeEvent.contentOffset.y;
 
-    // Mostrar botón después de hacer scroll de 100px (solo si no se ha mostrado antes)
     if (scrollY > 100 && !showAIButton && !hasShownAIButton) {
       setShowAIButton(true);
     }
@@ -133,7 +139,6 @@ export default function RecommendationsScreen() {
 
     if (selectedCategory === 'all') return matchesSearch;
 
-    // Si se selecciona "Me gusta", mostrar solo los viajes con like
     if (selectedCategory === 'liked') {
       return matchesSearch && likedTrips.has(trip.id);
     }
@@ -167,54 +172,109 @@ export default function RecommendationsScreen() {
       </View>
 
       {/* Category Filters */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.categoriesContainer}
-        contentContainerStyle={styles.categoriesContent}
+      <View style={styles.categoriesWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesContainer}
+          contentContainerStyle={styles.categoriesContent}
+        >
+          <TouchableOpacity
+            style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
+            onPress={() => setSelectedCategory('all')}
+          >
+            <IconSymbol
+              name="location.fill"
+              size={16}
+              color={selectedCategory === 'all' ? '#FFFFFF' : '#374151'}
+            />
+            <Text style={[styles.categoryText, selectedCategory === 'all' && styles.categoryTextActive]}>
+              Todos
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.categoryChip, selectedCategory === 'liked' && styles.categoryChipActive]}
+            onPress={() => setSelectedCategory('liked')}
+          >
+            <IconSymbol
+              name="heart"
+              size={16}
+              color={selectedCategory === 'liked' ? '#FFFFFF' : '#374151'}
+            />
+            <Text style={[styles.categoryText, selectedCategory === 'liked' && styles.categoryTextActive]}>
+              Me gusta
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+        <TouchableOpacity
+          style={styles.filterChip}
+          onPress={() => setShowFiltersModal(true)}
+        >
+          <IconSymbol
+            name="slider.horizontal.3"
+            size={18}
+            color="#111827"
+          />
+        </TouchableOpacity>
+      </View>
+
+      {/* Filters Modal */}
+      <Modal
+        visible={showFiltersModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowFiltersModal(false)}
       >
         <TouchableOpacity
-          style={[styles.categoryChip, selectedCategory === 'all' && styles.categoryChipActive]}
-          onPress={() => setSelectedCategory('all')}
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowFiltersModal(false)}
         >
-          <IconSymbol
-            name="location.fill"
-            size={16}
-            color={selectedCategory === 'all' ? '#FFFFFF' : '#374151'}
-          />
-          <Text style={[styles.categoryText, selectedCategory === 'all' && styles.categoryTextActive]}>
-            Todos
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.categoryChip, selectedCategory === 'liked' && styles.categoryChipActive]}
-          onPress={() => setSelectedCategory('liked')}
-        >
-          <IconSymbol
-            name="heart"
-            size={16}
-            color={selectedCategory === 'liked' ? '#FFFFFF' : '#374151'}
-          />
-          <Text style={[styles.categoryText, selectedCategory === 'liked' && styles.categoryTextActive]}>
-            Me gusta
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.categoryChip, selectedCategory === 'adventure' && styles.categoryChipActive]}
-          onPress={() => setSelectedCategory('adventure')}
-        >
-          <IconSymbol
-            name="leaf.fill"
-            size={16}
-            color={selectedCategory === 'adventure' ? '#FFFFFF' : '#374151'}
-          />
-          <Text style={[styles.categoryText, selectedCategory === 'adventure' && styles.categoryTextActive]}>
-            Aventura
-          </Text>
-        </TouchableOpacity>
+          <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filtros</Text>
+              <TouchableOpacity onPress={() => setShowFiltersModal(false)}>
+                <IconSymbol name="chevron.down" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
 
-        
-      </ScrollView>
+            <ScrollView style={styles.filtersList}>
+              {filterCategories.map((filter) => (
+                <TouchableOpacity
+                  key={filter.id}
+                  style={[
+                    styles.filterItem,
+                    selectedCategory === filter.id && styles.filterItemActive
+                  ]}
+                  onPress={() => {
+                    setSelectedCategory(filter.id);
+                    setShowFiltersModal(false);
+                  }}
+                >
+                  <View style={styles.filterItemLeft}>
+                    <IconSymbol
+                      name={filter.icon as any}
+                      size={20}
+                      color={selectedCategory === filter.id ? '#FFFFFF' : '#374151'}
+                    />
+                    <Text style={[
+                      styles.filterItemText,
+                      selectedCategory === filter.id && styles.filterItemTextActive
+                    ]}>
+                      {filter.label}
+                    </Text>
+                  </View>
+                  {selectedCategory === filter.id && (
+                    <View style={styles.checkmark}>
+                      <Text style={styles.checkmarkText}>✓</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
 
       <ScrollView
         style={styles.scrollContainer}
@@ -309,7 +369,6 @@ export default function RecommendationsScreen() {
         )}
       </ScrollView>
 
-      {/* Floating AI Button - Animated */}
       <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle]}>
         <TouchableOpacity style={styles.aiButton} onPress={handleExploreWithAI}>
           <IconSymbol name="magnifyingglass" size={20} color="#FFFFFF" />
@@ -369,14 +428,22 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#9CA3AF',
   },
-  categoriesContainer: {
+  categoriesWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 24,
+    paddingRight: 24,
     marginBottom: 20,
+    gap: 12,
+  },
+  categoriesContainer: {
+    flex: 1,
     maxHeight: 40,
   },
   categoriesContent: {
-    paddingHorizontal: 24,
     gap: 8,
     flexDirection: 'row',
+    alignItems: 'center',
   },
   categoryChip: {
     flexDirection: 'row',
@@ -397,6 +464,14 @@ const styles = StyleSheet.create({
   },
   categoryTextActive: {
     color: '#FFFFFF',
+  },
+  filterChip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F6',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContainer: {
     flex: 1,
@@ -572,5 +647,75 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  filtersList: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  filterItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#F9FAFB',
+  },
+  filterItemActive: {
+    backgroundColor: '#000000',
+  },
+  filterItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  filterItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  filterItemTextActive: {
+    color: '#FFFFFF',
+  },
+  checkmark: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmarkText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#000000',
   },
 });

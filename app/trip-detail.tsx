@@ -145,15 +145,13 @@ export default function TripDetailScreen() {
         
         {/* Header overlay - only show when image is visible */}
         {showHeaderButtons && (
-          <Animated.View 
+          <View
             style={styles.headerOverlay}
-            entering={FadeIn.duration(200)}
-            exiting={FadeOut.duration(200)}
           >
             <TouchableOpacity style={styles.backButton} onPress={handleBack}>
               <IconSymbol name="chevron.left" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-            
+
             <View style={styles.actionButtons}>
               <TouchableOpacity style={styles.actionButton} onPress={handleFavorite}>
                 <IconSymbol name="heart" size={24} color="#FFFFFF" />
@@ -162,7 +160,7 @@ export default function TripDetailScreen() {
                 <IconSymbol name="share" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
-          </Animated.View>
+          </View>
         )}
       </View>
 

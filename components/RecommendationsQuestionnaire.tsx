@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar, ScrollView, ActivityIndicator } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
+// import Animated, { FadeIn, SlideInUp } from 'react-native-reanimated';
 import { useUser } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
 
@@ -229,26 +229,23 @@ export default function RecommendationsQuestionnaire({ onComplete }: Recommendat
 
       <View style={styles.progressContainer}>
         <View style={styles.progressBackground}>
-          <Animated.View
+          <View
             style={[styles.progressFill, { width: `${progress}%` }]}
-            entering={FadeIn.duration(300)}
           />
         </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <Animated.View
+        <View
           style={styles.questionContainer}
-          entering={SlideInUp.duration(400)}
           key={currentQuestion}
         >
           <Text style={styles.questionText}>{currentQ.question}</Text>
           <Text style={styles.subtitleText}>{currentQ.subtitle}</Text>
-        </Animated.View>
+        </View>
 
-        <Animated.View
+        <View
           style={styles.optionsContainer}
-          entering={SlideInUp.duration(400).delay(100)}
         >
           {currentQ.options.map((option, index) => (
             <TouchableOpacity
@@ -275,7 +272,7 @@ export default function RecommendationsQuestionnaire({ onComplete }: Recommendat
               </Text>
             </TouchableOpacity>
           ))}
-        </Animated.View>
+        </View>
       </ScrollView>
 
       <View style={styles.footer}>
