@@ -6,6 +6,7 @@ import Animated, {
   withSpring,
 
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from './IconSymbol';
 
 interface TabBarProps {
@@ -22,8 +23,8 @@ const springConfig = {
 
 export default function AnimatedTabBar({ state, descriptors, navigation }: TabBarProps) {
   const selectedIndex = useSharedValue(0);
+  const insets = useSafeAreaInsets();
 
-  // Update selected index when tab changes
   React.useEffect(() => {
     selectedIndex.value = withSpring(state.index, springConfig);
   }, [state.index, selectedIndex]);
@@ -94,11 +95,9 @@ export default function AnimatedTabBar({ state, descriptors, navigation }: TabBa
   const tabStyles = [tab0Style, tab1Style, tab2Style, tab3Style];
 
   return (
-    <View style={styles.container}>
-      {/* Background indicator */}
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'ios' ? 20 : 10) }]}>
       <Animated.View style={[styles.indicator, indicatorStyle]} />
-      
-      {/* Tab buttons */}
+
       <View style={styles.tabContainer}>
         {state.routes.map((route: any, index: number) => {
           const { options } = descriptors[route.key];
@@ -156,7 +155,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
     paddingTop: 10,
   },
   indicator: {

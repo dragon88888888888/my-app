@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
 import { useSignUp, useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -86,7 +86,11 @@ export default function SignUpScreen() {
   }, []);
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={styles.header}>
@@ -97,7 +101,12 @@ export default function SignUpScreen() {
         <View style={styles.spacer} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <Text style={styles.subtitle}>Únete a la experiencia Nova</Text>
 
         {!pendingVerification ? (
@@ -215,8 +224,8 @@ export default function SignUpScreen() {
             </TouchableOpacity>
           </View>
         )}
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -243,7 +252,10 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 24,
+    paddingBottom: 40,
   },
   subtitle: {
     fontSize: 16,

@@ -1,5 +1,6 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Dimensions, PanResponder } from 'react-native';
+import { Image } from 'expo-image';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Animated, {
   FadeIn,
@@ -28,10 +29,23 @@ interface AstralProfile {
 
 interface ProfileData {
   aventura: number;
+  sostenibilidad: number;
   cultura: number;
   conexion: number;
-  luxe: number;
-  conciencia: number;
+  lujo: number;
+}
+
+interface SecondaryAttributes {
+  exploradorIntensivo: number;
+  viajeroContemplativo: number;
+  cazadorExperiencias: number;
+  arquitectoViaje: number;
+  naveganteLibre: number;
+  exploradorEquilibrado: number;
+  transformacionPersonal: number;
+  contribucionSocial: number;
+  inspiracionCreativa: number;
+  coleccionistaHistorias: number;
 }
 
 // Datos mock del perfil astral - esto se reemplazará con datos reales del agente
@@ -42,43 +56,87 @@ const astralProfile: AstralProfile = {
   nivel: 42,
 };
 
-const profileData: ProfileData = {
-  aventura: 95,
-  cultura: 88,
-  conexion: 92,
-  luxe: 66,
-  conciencia: 90,
+const initialProfileData: ProfileData = {
+  aventura: 25,
+  sostenibilidad: 20,
+  cultura: 20,
+  conexion: 20,
+  lujo: 15,
 };
 
-const StatCard = ({ label, value, icon, delay }: { label: string; value: number; icon: any; delay: number }) => {
-  const progress = useSharedValue(0);
+const initialSecondaryAttributes: SecondaryAttributes = {
+  exploradorIntensivo: 15,
+  viajeroContemplativo: 40,
+  cazadorExperiencias: 10,
+  arquitectoViaje: 5,
+  naveganteLibre: 30,
+  exploradorEquilibrado: 0,
+  transformacionPersonal: 35,
+  contribucionSocial: 25,
+  inspiracionCreativa: 20,
+  coleccionistaHistorias: 20,
+};
 
-  useEffect(() => {
-    progress.value = withTiming(value / 100, { duration: 1000 });
-  }, [value]);
+const CustomSlider = ({
+  value,
+  onValueChange,
+  color
+}: {
+  value: number;
+  onValueChange: (value: number) => void;
+  color: string;
+}) => {
+  const [sliderWidth, setSliderWidth] = useState(0);
 
-  const animatedStyle = useAnimatedStyle(() => {
-    return {
-      width: `${interpolate(progress.value, [0, 1], [0, 100], Extrapolate.CLAMP)}%`,
-    };
+  const panResponder = PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderGrant: (evt) => {
+      const locationX = evt.nativeEvent.locationX;
+      const percentage = Math.max(0, Math.min(100, (locationX / sliderWidth) * 100));
+      onValueChange(percentage);
+    },
+    onPanResponderMove: (evt) => {
+      const locationX = evt.nativeEvent.locationX;
+      const percentage = Math.max(0, Math.min(100, (locationX / sliderWidth) * 100));
+      onValueChange(percentage);
+    },
   });
 
   return (
-    <Animated.View
-      style={styles.statCard}
-      entering={SlideInLeft.duration(400).delay(delay)}
+    <View
+      style={styles.sliderTrack}
+      onLayout={(e) => setSliderWidth(e.nativeEvent.layout.width)}
+      {...panResponder.panHandlers}
     >
-      <View style={styles.statHeader}>
-        <View style={styles.statIconContainer}>
-          {icon}
-        </View>
-        <Text style={styles.statLabel}>{label}</Text>
-        <Text style={styles.statValue}>{value}</Text>
+      <View style={[styles.sliderFill, { width: `${value}%`, backgroundColor: color }]} />
+      <View style={[styles.sliderThumb, { left: `${value}%`, backgroundColor: color }]} />
+    </View>
+  );
+};
+
+const EditableStatBar = ({
+  label,
+  value,
+  emoji,
+  onChange,
+  color = '#000000'
+}: {
+  label: string;
+  value: number;
+  emoji: string;
+  onChange: (value: number) => void;
+  color?: string;
+}) => {
+  return (
+    <View style={styles.sliderCard}>
+      <View style={styles.sliderHeader}>
+        <Text style={styles.sliderEmoji}>{emoji}</Text>
+        <Text style={styles.sliderLabel}>{label}</Text>
+        <Text style={styles.sliderValue}>{Math.round(value)}</Text>
       </View>
-      <View style={styles.statBarBackground}>
-        <Animated.View style={[styles.statBarFill, animatedStyle]} />
-      </View>
-    </Animated.View>
+      <CustomSlider value={value} onValueChange={onChange} color={color} />
+    </View>
   );
 };
 
@@ -132,30 +190,32 @@ const AstralCard = () => {
         <View style={styles.astralRingSegment3} />
       </Animated.View>
 
-      {/* Static inner content */}
+      {/* Static inner content - Profile Picture */}
       <View style={styles.astralContent}>
-        <Text style={styles.astralSigno}>{astralProfile.signo}</Text>
-        <Text style={styles.astralElemento}>{astralProfile.elemento}</Text>
-        <View style={styles.astralLevel}>
-          <Text style={styles.astralLevelLabel}>Nivel</Text>
-          <Text style={styles.astralLevelValue}>{astralProfile.nivel}</Text>
-        </View>
+        <Image
+          source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&q=80' }}
+          style={styles.profileImage}
+          contentFit="cover"
+        />
       </View>
     </Animated.View>
   );
 };
 
 const PentagonChart = ({ data }: { data: ProfileData }) => {
-  const center = { x: 100, y: 100 };
-  const radius = 70;
+  const center = { x: 150, y: 150 };
+  const radius = 120;
+  const minRadius = 20; // Radio mínimo para que el pentágono siempre sea visible
 
   const angles = [-90, -18, 54, 126, 198];
-  const labels = ['Aventura', 'Cultura', 'Conexión', 'Luxe', 'Conciencia'];
-  const values = [data.aventura, data.cultura, data.conexion, data.luxe, data.conciencia];
+  const labels = ['Aventura', 'Sostenible', 'Cultura', 'Conexión', 'Lujo'];
+  const values = [data.aventura, data.sostenibilidad, data.cultura, data.conexion, data.lujo];
+  const colors = ['#EF4444', '#10B981', '#8B5CF6', '#F59E0B', '#3B82F6'];
 
   const calculatePoint = (angle: number, value: number) => {
     const radian = (angle * Math.PI) / 180;
-    const distance = (radius * value) / 100;
+    // Mapear el valor de 0-100 a minRadius-radius para que siempre sea visible
+    const distance = minRadius + ((radius - minRadius) * value) / 100;
     return {
       x: center.x + distance * Math.cos(radian),
       y: center.y + distance * Math.sin(radian),
@@ -165,6 +225,18 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
   const pentagonPoints = values.map((value, index) =>
     calculatePoint(angles[index], value)
   );
+
+  // Función para calcular puntos del pentágono a diferentes escalas
+  const createPentagonPath = (scale: number) => {
+    const points = angles.map(angle => {
+      const radian = (angle * Math.PI) / 180;
+      return {
+        x: center.x + (radius * scale) * Math.cos(radian),
+        y: center.y + (radius * scale) * Math.sin(radian),
+      };
+    });
+    return points;
+  };
 
   const pulseAnimation = useSharedValue(1);
 
@@ -191,26 +263,42 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
       entering={SlideInUp.duration(500).delay(300)}
     >
       <Animated.View style={[styles.chartContent, animatedPulse]}>
-        {/* Grid circles */}
-        {[1, 0.75, 0.5, 0.25].map((scale, idx) => (
-          <View
-            key={idx}
-            style={[
-              styles.gridCircle,
-              {
-                width: radius * 2 * scale,
-                height: radius * 2 * scale,
-              }
-            ]}
-          />
-        ))}
+        {/* Grid pentagons */}
+        {[1, 0.75, 0.5, 0.25].map((scale, idx) => {
+          const pentagonGridPoints = createPentagonPath(scale);
+          return (
+            <View key={idx} style={styles.gridPentagonContainer}>
+              {pentagonGridPoints.map((point, index) => {
+                const nextPoint = pentagonGridPoints[(index + 1) % pentagonGridPoints.length];
+                const lineLength = Math.sqrt(
+                  Math.pow(nextPoint.x - point.x, 2) + Math.pow(nextPoint.y - point.y, 2)
+                );
+                const angle = Math.atan2(nextPoint.y - point.y, nextPoint.x - point.x) * (180 / Math.PI);
+
+                return (
+                  <View
+                    key={index}
+                    style={[
+                      styles.gridPentagonEdge,
+                      {
+                        left: point.x,
+                        top: point.y,
+                        width: lineLength,
+                        transform: [
+                          { translateY: -0.5 },
+                          { rotate: `${angle}deg` }
+                        ],
+                      }
+                    ]}
+                  />
+                );
+              })}
+            </View>
+          );
+        })}
 
         {/* Grid lines */}
         {angles.map((angle, index) => {
-          const radian = (angle * Math.PI) / 180;
-          const endX = center.x + radius * Math.cos(radian);
-          const endY = center.y + radius * Math.sin(radian);
-
           return (
             <View
               key={index}
@@ -249,8 +337,9 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
                     left: point.x,
                     top: point.y,
                     width: lineLength,
+                    backgroundColor: colors[index],
                     transform: [
-                      { translateY: -1.5 },
+                      { translateY: -1 },
                       { rotate: `${angle}deg` }
                     ],
                   }
@@ -265,8 +354,10 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
               style={[
                 styles.pentagonPoint,
                 {
-                  left: point.x - 5,
-                  top: point.y - 5,
+                  left: point.x - 6,
+                  top: point.y - 6,
+                  backgroundColor: colors[index],
+                  borderColor: colors[index],
                 }
               ]}
             />
@@ -286,13 +377,15 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
               style={[
                 styles.chartLabelContainer,
                 {
-                  left: x - 35,
-                  top: y - 12,
+                  left: x - 45,
+                  top: y - 20,
                 }
               ]}
             >
               <Text style={styles.chartLabel}>{labels[index]}</Text>
-              <Text style={styles.chartValue}>{values[index]}</Text>
+              <View style={[styles.chartValueBadge, { backgroundColor: colors[index] }]}>
+                <Text style={styles.chartValue}>{Math.round(values[index])}</Text>
+              </View>
             </View>
           );
         })}
@@ -303,6 +396,11 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
 
 export default function ProfileScreen() {
   const { signOut } = useAuth();
+  const [profileData, setProfileData] = React.useState<ProfileData>(initialProfileData);
+  const [secondaryAttrs, setSecondaryAttrs] = React.useState<SecondaryAttributes>(initialSecondaryAttributes);
+
+  const totalPrimaryPoints = Object.values(profileData).reduce((sum, val) => sum + val, 0);
+  const totalSecondaryPoints = Object.values(secondaryAttrs).reduce((sum, val) => sum + val, 0);
 
   const handleSignOut = async () => {
     try {
@@ -313,14 +411,63 @@ export default function ProfileScreen() {
     }
   };
 
+  const handlePrimaryChange = (key: keyof ProfileData, newValue: number) => {
+    newValue = Math.round(newValue); // Asegurar números enteros
+    const diff = newValue - profileData[key];
+    const others = Object.keys(profileData).filter(k => k !== key) as (keyof ProfileData)[];
+    const othersTotal = others.reduce((sum, k) => sum + profileData[k], 0);
+
+    if (othersTotal === 0 && diff > 0) return;
+
+    const newData = { ...profileData, [key]: newValue };
+
+    others.forEach(k => {
+      const proportion = othersTotal > 0 ? profileData[k] / othersTotal : 1 / others.length;
+      newData[k] = Math.max(0, Math.round(profileData[k] - (diff * proportion)));
+    });
+
+    const sum = Object.values(newData).reduce((s, v) => s + v, 0);
+    if (sum > 0) {
+      Object.keys(newData).forEach(k => {
+        newData[k as keyof ProfileData] = Math.round((newData[k as keyof ProfileData] / sum) * 100);
+      });
+    }
+
+    setProfileData(newData);
+  };
+
+  const handleSecondaryChange = (key: keyof SecondaryAttributes, newValue: number) => {
+    newValue = Math.round(newValue); // Asegurar números enteros
+    const diff = newValue - secondaryAttrs[key];
+    const others = Object.keys(secondaryAttrs).filter(k => k !== key) as (keyof SecondaryAttributes)[];
+    const othersTotal = others.reduce((sum, k) => sum + secondaryAttrs[k], 0);
+
+    if (othersTotal === 0 && diff > 0) return;
+
+    const newData = { ...secondaryAttrs, [key]: newValue };
+
+    others.forEach(k => {
+      const proportion = othersTotal > 0 ? secondaryAttrs[k] / othersTotal : 1 / others.length;
+      newData[k] = Math.max(0, Math.round(secondaryAttrs[k] - (diff * proportion)));
+    });
+
+    const sum = Object.values(newData).reduce((s, v) => s + v, 0);
+    if (sum > 0) {
+      Object.keys(newData).forEach(k => {
+        newData[k as keyof SecondaryAttributes] = Math.round((newData[k as keyof SecondaryAttributes] / sum) * 100);
+      });
+    }
+
+    setSecondaryAttrs(newData);
+  };
+
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <Animated.View style={styles.header} entering={SlideInUp.duration(300)}>
         <View>
-          <Text style={styles.title}>Tu Perfil Astral</Text>
-          <Text style={styles.subtitle}>Viajero Nivel {astralProfile.nivel}</Text>
+          <Text style={styles.title}>Tu Perfil</Text>
         </View>
         <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
           <IconSymbol name="gearshape.fill" size={24} color="#374151" />
@@ -345,49 +492,143 @@ export default function ProfileScreen() {
             style={styles.sectionTitle}
             entering={SlideInLeft.duration(400).delay(500)}
           >
-            Diagrama de Experiencias
+            Perfil del Viajero
           </Animated.Text>
           <PentagonChart data={profileData} />
         </View>
 
-        {/* Stats Cards */}
+        {/* Dimensiones Principales */}
         <View style={styles.statsSection}>
           <Animated.Text
             style={styles.sectionTitle}
             entering={SlideInLeft.duration(400).delay(600)}
           >
-            Atributos del Viajero
+            Dimensiones Principales (100 pts)
           </Animated.Text>
 
-          <StatCard
-            label="Espíritu de Aventura"
+          <EditableStatBar
+            emoji="🏔️"
+            label="Espíritu Aventurero"
             value={profileData.aventura}
-            icon={<IconSymbol name="leaf.fill" size={20} color="#000000" />}
-            delay={700}
+            onChange={(v) => handlePrimaryChange('aventura', v)}
+            color="#EF4444"
           />
-          <StatCard
-            label="Consciencia Cultural"
+
+          <EditableStatBar
+            emoji="🌱"
+            label="Conciencia Sostenible"
+            value={profileData.sostenibilidad}
+            onChange={(v) => handlePrimaryChange('sostenibilidad', v)}
+            color="#10B981"
+          />
+
+          <EditableStatBar
+            emoji="🎭"
+            label="Inmersión Cultural"
             value={profileData.cultura}
-            icon={<IconSymbol name="sparkles" size={20} color="#000000" />}
-            delay={800}
+            onChange={(v) => handlePrimaryChange('cultura', v)}
+            color="#8B5CF6"
           />
-          <StatCard
+
+          <EditableStatBar
+            emoji="❤️"
             label="Conexión Humana"
             value={profileData.conexion}
-            icon={<IconSymbol name="heart" size={20} color="#000000" />}
-            delay={900}
+            onChange={(v) => handlePrimaryChange('conexion', v)}
+            color="#F59E0B"
           />
-          <StatCard
-            label="Apreciación del Luxe"
-            value={profileData.luxe}
-            icon={<IconSymbol name="dollarsign" size={20} color="#000000" />}
-            delay={1000}
+
+          <EditableStatBar
+            emoji="✨"
+            label="Apreciación del Lujo"
+            value={profileData.lujo}
+            onChange={(v) => handlePrimaryChange('lujo', v)}
+            color="#3B82F6"
           />
-          <StatCard
-            label="Conciencia Ecológica"
-            value={profileData.conciencia}
-            icon={<IconSymbol name="leaf.fill" size={20} color="#000000" />}
-            delay={1100}
+        </View>
+
+        {/* Ritmo de Viaje */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Ritmo de Viaje</Text>
+          <EditableStatBar
+            emoji="🎯"
+            label="Explorador Intensivo"
+            value={secondaryAttrs.exploradorIntensivo}
+            onChange={(v) => handleSecondaryChange('exploradorIntensivo', v)}
+            color="#DC2626"
+          />
+          <EditableStatBar
+            emoji="🧘"
+            label="Viajero Contemplativo"
+            value={secondaryAttrs.viajeroContemplativo}
+            onChange={(v) => handleSecondaryChange('viajeroContemplativo', v)}
+            color="#059669"
+          />
+          <EditableStatBar
+            emoji="📸"
+            label="Cazador de Experiencias"
+            value={secondaryAttrs.cazadorExperiencias}
+            onChange={(v) => handleSecondaryChange('cazadorExperiencias', v)}
+            color="#7C3AED"
+          />
+        </View>
+
+        {/* Estilo de Planificación */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Estilo de Planificación</Text>
+          <EditableStatBar
+            emoji="📋"
+            label="Arquitecto del Viaje"
+            value={secondaryAttrs.arquitectoViaje}
+            onChange={(v) => handleSecondaryChange('arquitectoViaje', v)}
+            color="#D97706"
+          />
+          <EditableStatBar
+            emoji="🎲"
+            label="Navegante Libre"
+            value={secondaryAttrs.naveganteLibre}
+            onChange={(v) => handleSecondaryChange('naveganteLibre', v)}
+            color="#2563EB"
+          />
+          <EditableStatBar
+            emoji="🗺️"
+            label="Explorador Equilibrado"
+            value={secondaryAttrs.exploradorEquilibrado}
+            onChange={(v) => handleSecondaryChange('exploradorEquilibrado', v)}
+            color="#EC4899"
+          />
+        </View>
+
+        {/* Motivación Principal */}
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Motivación Principal</Text>
+          <EditableStatBar
+            emoji="🌟"
+            label="Transformación Personal"
+            value={secondaryAttrs.transformacionPersonal}
+            onChange={(v) => handleSecondaryChange('transformacionPersonal', v)}
+            color="#F59E0B"
+          />
+          <EditableStatBar
+            emoji="🤝"
+            label="Contribución Social"
+            value={secondaryAttrs.contribucionSocial}
+            onChange={(v) => handleSecondaryChange('contribucionSocial', v)}
+            color="#10B981"
+          />
+          <EditableStatBar
+            emoji="🎨"
+            label="Inspiración Creativa"
+            value={secondaryAttrs.inspiracionCreativa}
+            onChange={(v) => handleSecondaryChange('inspiracionCreativa', v)}
+            color="#8B5CF6"
+          />
+          <EditableStatBar
+            emoji="🏛️"
+            label="Coleccionista de Historias"
+            value={secondaryAttrs.coleccionistaHistorias}
+            onChange={(v) => handleSecondaryChange('coleccionistaHistorias', v)}
+            color="#EF4444"
           />
         </View>
 
@@ -492,40 +733,11 @@ const styles = StyleSheet.create({
     borderColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    overflow: 'hidden',
   },
-  astralSigno: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  astralElemento: {
-    fontSize: 12,
-    color: '#6B7280',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
-  astralLevel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#000000',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  astralLevelLabel: {
-    fontSize: 10,
-    color: '#FFFFFF',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  astralLevelValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
+  profileImage: {
+    width: '100%',
+    height: '100%',
   },
 
   // Description
@@ -552,22 +764,34 @@ const styles = StyleSheet.create({
   chartContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    height: 280,
-    marginTop: 16,
+    height: 450,
+    marginTop: 20,
+    marginBottom: 20,
   },
   chartContent: {
-    width: 200,
-    height: 200,
+    width: 300,
+    height: 300,
     position: 'relative',
   },
   gridCircle: {
     position: 'absolute',
     top: '50%',
     left: '50%',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#E5E7EB',
     borderRadius: 1000,
-    transform: [{ translateX: -70 }, { translateY: -70 }],
+    transform: [{ translateX: -120 }, { translateY: -120 }],
+  },
+  gridPentagonContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
+  gridPentagonEdge: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    transformOrigin: '0 50%',
   },
   radarLine: {
     position: 'absolute',
@@ -582,35 +806,53 @@ const styles = StyleSheet.create({
   },
   pentagonEdge: {
     position: 'absolute',
-    height: 3,
-    backgroundColor: '#000000',
+    height: 2,
     transformOrigin: '0 50%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
   },
   pentagonPoint: {
     position: 'absolute',
-    width: 10,
-    height: 10,
-    backgroundColor: '#000000',
-    borderRadius: 5,
-    borderWidth: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 3,
     borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   chartLabelContainer: {
     position: 'absolute',
-    width: 70,
+    width: 90,
     alignItems: 'center',
   },
   chartLabel: {
-    fontSize: 11,
-    color: '#374151',
+    fontSize: 12,
+    color: '#6B7280',
     textAlign: 'center',
     fontWeight: '600',
+    marginBottom: 4,
+  },
+  chartValueBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
   },
   chartValue: {
-    fontSize: 14,
-    color: '#111827',
-    fontWeight: 'bold',
-    marginTop: 2,
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 
   // Stats Section
@@ -618,56 +860,94 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#111827',
     marginBottom: 16,
   },
-  statCard: {
+  pointsCounter: {
     backgroundColor: '#F9FAFB',
-    padding: 16,
+    padding: 12,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: '#E5E7EB',
   },
-  statHeader: {
+  pointsText: {
+    fontSize: 14,
+    color: '#374151',
+    textAlign: 'center',
+  },
+  pointsValue: {
+    fontWeight: 'bold',
+    color: '#000000',
+  },
+  pointsOverLimit: {
+    color: '#EF4444',
+  },
+  sliderCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  sliderHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
-  statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    justifyContent: 'center',
-    alignItems: 'center',
+  sliderEmoji: {
+    fontSize: 24,
     marginRight: 12,
   },
-  statLabel: {
+  sliderLabel: {
     flex: 1,
-    fontSize: 15,
-    color: '#374151',
-    fontWeight: '500',
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
     color: '#111827',
+    fontWeight: '600',
   },
-  statBarBackground: {
-    height: 6,
+  sliderValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    minWidth: 40,
+    textAlign: 'right',
+  },
+  sliderTrack: {
+    height: 8,
     backgroundColor: '#E5E7EB',
-    borderRadius: 3,
-    overflow: 'hidden',
+    borderRadius: 4,
+    position: 'relative',
+    marginTop: 8,
   },
-  statBarFill: {
+  sliderFill: {
     height: '100%',
-    backgroundColor: '#000000',
-    borderRadius: 3,
+    borderRadius: 4,
+    position: 'absolute',
+    left: 0,
+    top: 0,
+  },
+  sliderThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    position: 'absolute',
+    top: -8,
+    marginLeft: -12,
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   footer: {
     height: 40,

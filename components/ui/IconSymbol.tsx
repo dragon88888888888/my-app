@@ -31,9 +31,19 @@ const MAPPING = {
   'add.circle': 'add-circle',
   'plus': 'add',
   'heart': 'favorite-border',
+  'heart.fill': 'favorite',
   'share': 'share',
   'magnifyingglass': 'search',
   'sparkles': 'auto-awesome',
+  'globe': 'public',
+  'star.fill': 'star',
+  'lightbulb.fill': 'lightbulb',
+  'paperclip': 'attach-file',
+  'arrow.up': 'arrow-upward',
+  'line.3.horizontal': 'menu',
+  'line.3.horizontal.decrease': 'filter-list',
+  'chevron.down': 'keyboard-arrow-down',
+  'slider.horizontal.3': 'tune',
 } as IconMapping;
 
 /**
