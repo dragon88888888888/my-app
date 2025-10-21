@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform, ActivityIndicator } from 'react-native';
 import { useSignUp, useAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { UserService } from '@/lib/userService';
 
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
@@ -32,18 +33,29 @@ export default function SignUpScreen() {
   }, []);
 
   const handleSignUp = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      console.log('❌ [Signup] Clerk no está cargado');
+      return;
+    }
+
+    console.log('📝 [Signup] Iniciando creación de cuenta...');
+    console.log('  - Email:', email);
+    console.log('  - Password length:', password.length);
 
     setLoading(true);
     try {
+      console.log('📝 [Signup] Creando cuenta en Clerk...');
       await signUp.create({
         emailAddress: email,
         password,
       });
 
+      console.log('📝 [Signup] Cuenta creada, preparando verificación...');
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
+      console.log('✅ [Signup] Email de verificación enviado');
       setPendingVerification(true);
     } catch (err: any) {
+      console.error('❌ [Signup] Error:', err);
       Alert.alert('Error', err.errors?.[0]?.message || 'Error al crear cuenta');
     } finally {
       setLoading(false);
@@ -51,7 +63,12 @@ export default function SignUpScreen() {
   };
 
   const handleVerification = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      console.log('❌ [Signup] Clerk no está cargado para verificación');
+      return;
+    }
+
+    console.log('🔐 [Signup] Verificando código:', code);
 
     setLoading(true);
     try {
@@ -59,8 +76,34 @@ export default function SignUpScreen() {
         code,
       });
 
+      console.log('🔐 [Signup] Estado de verificación:', completeSignUp.status);
+
       if (completeSignUp.status === 'complete') {
         await setActive({ session: completeSignUp.createdSessionId });
+
+        // IMPORTANTE: Sincronizar con Supabase ANTES de navegar al cuestionario
+        console.log('✅ Cuenta verificada, sincronizando con Supabase...');
+
+        const user = completeSignUp.createdUserId;
+        const emailAddress = completeSignUp.emailAddress;
+
+        if (user) {
+          const supabaseUser = await UserService.syncClerkUser(user, emailAddress || undefined);
+
+          if (supabaseUser) {
+            console.log('✅ Usuario sincronizado con Supabase:', supabaseUser.id);
+          } else {
+            console.error('❌ Error al sincronizar usuario con Supabase');
+            Alert.alert(
+              'Error de Sincronización',
+              'Tu cuenta fue creada pero hubo un problema al sincronizar. Por favor cierra la app e intenta nuevamente.',
+              [{ text: 'OK' }]
+            );
+            setLoading(false);
+            return;
+          }
+        }
+
         router.replace('/cuestionario');
       } else {
         console.log('Sign up incomplete:', completeSignUp);

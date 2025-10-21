@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { useUser } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
 import { useRouter } from 'expo-router';
+import AgentsService from '@/lib/agentsService';
+import Markdown from 'react-native-markdown-display';
 
 interface Message {
   id: number;
@@ -50,8 +52,11 @@ export default function ChatScreen() {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [userName, setUserName] = useState('');
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { user } = useUser();
   const router = useRouter();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     loadUserName();
@@ -69,10 +74,10 @@ export default function ChatScreen() {
     }
   };
 
-  const handleSendMessage = (text?: string) => {
+  const handleSendMessage = async (text?: string) => {
     const messageToSend = text || message.trim();
 
-    if (messageToSend) {
+    if (messageToSend && !loading) {
       const newUserMessage: Message = {
         id: Date.now(),
         text: messageToSend,
@@ -82,17 +87,65 @@ export default function ChatScreen() {
 
       setMessages(prev => [...prev, newUserMessage]);
       setMessage('');
+      setLoading(true);
 
-      // Simulate bot response
-      setTimeout(() => {
+      try {
+        if (!user) {
+          throw new Error('Usuario no autenticado');
+        }
+
+        const supabaseUser = await UserService.getUserByClerkId(user.id);
+
+        if (!supabaseUser) {
+          throw new Error('Usuario no encontrado en Supabase');
+        }
+
+        // Llamar al agente de chat
+        const response = await AgentsService.sendChatMessage({
+          user_id: supabaseUser.id.toString(),
+          message: messageToSend,
+          thread_id: threadId || undefined,
+        });
+
+        // Guardar el thread_id para mantener contexto
+        if (!threadId) {
+          setThreadId(response.thread_id);
+        }
+
+        // Validar que la respuesta no esté vacía
+        if (!response.message || response.message.trim() === '') {
+          throw new Error('El agente no retornó un mensaje');
+        }
+
+        // Agregar respuesta del bot
         const botResponse: Message = {
           id: Date.now() + 1,
-          text: 'Gracias por tu pregunta. Como asistente de viajes, puedo ayudarte con destinos, consejos de viaje y planificación. ¿Hay algo específico que te gustaría saber?',
+          text: response.message,
           sender: 'bot',
           timestamp: new Date(),
         };
+
         setMessages(prev => [...prev, botResponse]);
-      }, 1000);
+
+        // Scroll al final
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      } catch (error) {
+        console.error('Error sending message:', error);
+
+        // Respuesta de error
+        const errorResponse: Message = {
+          id: Date.now() + 1,
+          text: 'Lo siento, tuve un problema al procesar tu mensaje. Por favor intenta nuevamente.',
+          sender: 'bot',
+          timestamp: new Date(),
+        };
+
+        setMessages(prev => [...prev, errorResponse]);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -165,8 +218,10 @@ export default function ChatScreen() {
           </ScrollView>
         ) : (
           <ScrollView
+            ref={scrollViewRef}
             style={styles.messagesContainer}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.messagesContent}
           >
             {messages.map((msg) => (
               <View
@@ -176,14 +231,22 @@ export default function ChatScreen() {
                   msg.sender === 'user' ? styles.userMessage : styles.botMessage
                 ]}
               >
-                <Text style={[
-                  styles.messageText,
-                  msg.sender === 'user' ? styles.userMessageText : styles.botMessageText
-                ]}>
-                  {msg.text}
-                </Text>
+                {msg.sender === 'user' ? (
+                  <Text style={[styles.messageText, styles.userMessageText]}>
+                    {msg.text}
+                  </Text>
+                ) : (
+                  <Markdown style={chatMarkdownStyles}>
+                    {msg.text}
+                  </Markdown>
+                )}
               </View>
             ))}
+            {loading && (
+              <View style={[styles.messageContainer, styles.botMessage]}>
+                <ActivityIndicator size="small" color="#6B7280" />
+              </View>
+            )}
           </ScrollView>
         )}
       </View>
@@ -319,7 +382,9 @@ const styles = StyleSheet.create({
   messagesContainer: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingTop: 60,
+  },
+  messagesContent: {
+    paddingTop: 20,
     paddingBottom: 16,
   },
   messageContainer: {
@@ -386,5 +451,94 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: {
     backgroundColor: 'transparent',
+  },
+});
+
+const chatMarkdownStyles = StyleSheet.create({
+  body: {
+    fontSize: 16,
+    color: '#111827',
+    lineHeight: 22,
+  },
+  heading1: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  heading2: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  heading3: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  paragraph: {
+    marginBottom: 8,
+    lineHeight: 22,
+    fontSize: 16,
+    color: '#111827',
+  },
+  strong: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  bullet_list: {
+    marginBottom: 8,
+  },
+  ordered_list: {
+    marginBottom: 8,
+  },
+  list_item: {
+    marginBottom: 4,
+    flexDirection: 'row',
+  },
+  bullet_list_icon: {
+    fontSize: 16,
+    lineHeight: 22,
+    marginRight: 6,
+    color: '#6B7280',
+  },
+  code_inline: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    color: '#EF4444',
+  },
+  fence: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 6,
+    padding: 10,
+    marginVertical: 6,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  code_block: {
+    fontFamily: 'monospace',
+    fontSize: 13,
+    color: '#374151',
+  },
+  blockquote: {
+    backgroundColor: '#F9FAFB',
+    borderLeftWidth: 3,
+    borderLeftColor: '#9CA3AF',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    marginVertical: 8,
+    borderRadius: 4,
   },
 });

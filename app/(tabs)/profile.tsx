@@ -15,8 +15,10 @@ import Animated, {
   interpolate,
   Extrapolate,
 } from 'react-native-reanimated';
-import { useAuth } from '@clerk/clerk-expo';
+import { useAuth, useUser } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import { UserService } from '@/lib/userService';
+import Markdown from 'react-native-markdown-display';
 
 const { width } = Dimensions.get('window');
 
@@ -297,27 +299,6 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
           );
         })}
 
-        {/* Grid lines */}
-        {angles.map((angle, index) => {
-          return (
-            <View
-              key={index}
-              style={[
-                styles.radarLine,
-                {
-                  left: center.x,
-                  top: center.y,
-                  width: radius,
-                  transform: [
-                    { translateX: -0.5 },
-                    { translateY: -0.5 },
-                    { rotate: `${angle + 90}deg` }
-                  ],
-                }
-              ]}
-            />
-          );
-        })}
 
         {/* Pentagon shape */}
         <View style={styles.pentagonContainer}>
@@ -396,11 +377,16 @@ const PentagonChart = ({ data }: { data: ProfileData }) => {
 
 export default function ProfileScreen() {
   const { signOut } = useAuth();
+  const { user } = useUser();
   const [profileData, setProfileData] = React.useState<ProfileData>(initialProfileData);
   const [secondaryAttrs, setSecondaryAttrs] = React.useState<SecondaryAttributes>(initialSecondaryAttributes);
+  const [astralProfileData, setAstralProfileData] = React.useState<string | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = React.useState(true);
 
   const totalPrimaryPoints = Object.values(profileData).reduce((sum, val) => sum + val, 0);
   const totalSecondaryPoints = Object.values(secondaryAttrs).reduce((sum, val) => sum + val, 0);
+
+  
 
   const handleSignOut = async () => {
     try {
@@ -478,13 +464,8 @@ export default function ProfileScreen() {
         {/* Astral Card */}
         <AstralCard />
 
-        {/* Descripción */}
-        <Animated.View
-          style={styles.descriptionContainer}
-          entering={FadeIn.duration(500).delay(400)}
-        >
-          <Text style={styles.descriptionText}>{astralProfile.descripcion}</Text>
-        </Animated.View>
+        {/* Descripción del Perfil Astral */}
+       
 
         {/* Pentagon Chart */}
         <View style={styles.chartSection}>
@@ -951,5 +932,94 @@ const styles = StyleSheet.create({
   },
   footer: {
     height: 40,
+  },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    fontSize: 15,
+    color: '#374151',
+    lineHeight: 24,
+  },
+  heading1: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  heading2: {
+    fontSize: 19,
+    fontWeight: 'bold',
+    color: '#1F2937',
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  heading3: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#374151',
+    marginTop: 12,
+    marginBottom: 8,
+  },
+  paragraph: {
+    marginBottom: 12,
+    lineHeight: 24,
+    fontSize: 15,
+    color: '#374151',
+  },
+  strong: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  em: {
+    fontStyle: 'italic',
+  },
+  bullet_list: {
+    marginBottom: 12,
+  },
+  ordered_list: {
+    marginBottom: 12,
+  },
+  list_item: {
+    marginBottom: 6,
+    flexDirection: 'row',
+  },
+  bullet_list_icon: {
+    fontSize: 15,
+    lineHeight: 24,
+    marginRight: 8,
+    color: '#6B7280',
+  },
+  code_inline: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    fontFamily: 'monospace',
+    fontSize: 14,
+    color: '#EF4444',
+  },
+  fence: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 8,
+    padding: 12,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  code_block: {
+    fontFamily: 'monospace',
+    fontSize: 13,
+    color: '#374151',
+  },
+  blockquote: {
+    backgroundColor: '#F9FAFB',
+    borderLeftWidth: 4,
+    borderLeftColor: '#9CA3AF',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginVertical: 12,
+    borderRadius: 4,
   },
 });

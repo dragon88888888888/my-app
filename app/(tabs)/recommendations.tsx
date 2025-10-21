@@ -1,14 +1,227 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal, Alert } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-import Animated, { FadeIn, SlideInUp, useAnimatedStyle, useSharedValue, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
+import Animated, { FadeIn, SlideInUp, useAnimatedStyle, useSharedValue, withSpring, withTiming, withRepeat, withSequence, interpolate, runOnJS } from 'react-native-reanimated';
 import { TripsService } from '@/lib/tripsService';
 import { LegacyTrip } from '@/lib/supabase';
 import RecommendationsQuestionnaire from '@/components/RecommendationsQuestionnaire';
 import { UserService } from '@/lib/userService';
 import { useUser } from '@clerk/clerk-expo';
+import AgentsService from '@/lib/agentsService';
+
+// Componente de Loader con Animación de Círculos Pulsantes
+const TravelLoader = ({ message = 'Cargando viajes...' }: { message?: string }) => {
+  const circle1Scale = useSharedValue(1);
+  const circle2Scale = useSharedValue(1);
+  const circle3Scale = useSharedValue(1);
+  const circle1Opacity = useSharedValue(0.3);
+  const circle2Opacity = useSharedValue(0.3);
+  const circle3Opacity = useSharedValue(0.3);
+  const rotation = useSharedValue(0);
+  const textOpacity = useSharedValue(0.5);
+
+  useEffect(() => {
+    // Rotación del icono central
+    rotation.value = withRepeat(
+      withTiming(360, { duration: 3000 }),
+      -1,
+      false
+    );
+
+    // Círculo 1 - pulso
+    circle1Scale.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 0 }),
+        withTiming(1.8, { duration: 1200 }),
+      ),
+      -1,
+      false
+    );
+    circle1Opacity.value = withRepeat(
+      withSequence(
+        withTiming(0.6, { duration: 0 }),
+        withTiming(0, { duration: 1200 }),
+      ),
+      -1,
+      false
+    );
+
+    // Círculo 2 - pulso con delay
+    setTimeout(() => {
+      circle2Scale.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 0 }),
+          withTiming(1.8, { duration: 1200 }),
+        ),
+        -1,
+        false
+      );
+      circle2Opacity.value = withRepeat(
+        withSequence(
+          withTiming(0.6, { duration: 0 }),
+          withTiming(0, { duration: 1200 }),
+        ),
+        -1,
+        false
+      );
+    }, 400);
+
+    // Círculo 3 - pulso con más delay
+    setTimeout(() => {
+      circle3Scale.value = withRepeat(
+        withSequence(
+          withTiming(1, { duration: 0 }),
+          withTiming(1.8, { duration: 1200 }),
+        ),
+        -1,
+        false
+      );
+      circle3Opacity.value = withRepeat(
+        withSequence(
+          withTiming(0.6, { duration: 0 }),
+          withTiming(0, { duration: 1200 }),
+        ),
+        -1,
+        false
+      );
+    }, 800);
+
+    // Fade in/out del texto
+    textOpacity.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500 }),
+        withTiming(0.5, { duration: 1500 })
+      ),
+      -1,
+      true
+    );
+  }, []);
+
+  const circle1Style = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: circle1Scale.value }],
+      opacity: circle1Opacity.value,
+    };
+  });
+
+  const circle2Style = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: circle2Scale.value }],
+      opacity: circle2Opacity.value,
+    };
+  });
+
+  const circle3Style = useAnimatedStyle(() => {
+    return {
+      transform: [{ scale: circle3Scale.value }],
+      opacity: circle3Opacity.value,
+    };
+  });
+
+  const rotationStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${rotation.value}deg` }],
+    };
+  });
+
+  const textStyle = useAnimatedStyle(() => {
+    return {
+      opacity: textOpacity.value,
+    };
+  });
+
+  return (
+    <Animated.View style={loaderStyles.container} entering={FadeIn.duration(300)}>
+      <View style={loaderStyles.loaderWrapper}>
+        {/* Círculos pulsantes */}
+        <View style={loaderStyles.circlesContainer}>
+          <Animated.View style={[loaderStyles.circle, circle1Style]} />
+          <Animated.View style={[loaderStyles.circle, circle2Style]} />
+          <Animated.View style={[loaderStyles.circle, circle3Style]} />
+        </View>
+
+        {/* Icono central rotando */}
+        <Animated.View style={[loaderStyles.iconWrapper, rotationStyle]}>
+          <IconSymbol name="airplane" size={50} color="#000000" />
+        </Animated.View>
+      </View>
+
+      {/* Texto animado */}
+      <Animated.Text style={[loaderStyles.loadingText, textStyle]}>
+        {message}
+      </Animated.Text>
+
+      <Text style={loaderStyles.subText}>
+        {message.includes('recomendaciones')
+          ? 'Nuestro agente está analizando tus preferencias...'
+          : 'Preparando experiencias únicas para ti'}
+      </Text>
+    </Animated.View>
+  );
+};
+
+const loaderStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 80,
+    backgroundColor: '#FFFFFF',
+  },
+  loaderWrapper: {
+    marginBottom: 60,
+    height: 180,
+    width: 180,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  circlesContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  circle: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#000000',
+  },
+  iconWrapper: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#000000',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
+    zIndex: 10,
+  },
+  loadingText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  subText: {
+    fontSize: 15,
+    color: '#6B7280',
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 22,
+  },
+});
 
 export default function RecommendationsScreen() {
   const { user } = useUser();
@@ -23,6 +236,8 @@ export default function RecommendationsScreen() {
   const [showAIButton, setShowAIButton] = useState(false);
   const [hasShownAIButton, setHasShownAIButton] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [recommendedTripIds, setRecommendedTripIds] = useState<number[]>([]);
+  const [processingRecommendations, setProcessingRecommendations] = useState(false);
 
   const aiButtonOpacity = useSharedValue(0);
   const aiButtonTranslateY = useSharedValue(100);
@@ -96,10 +311,76 @@ export default function RecommendationsScreen() {
     });
   };
 
-  const handleQuestionnaireComplete = (answers: { [key: number]: string }) => {
+  const handleQuestionnaireComplete = async (answers: { [key: number]: string }) => {
     setQuestionnaireAnswers(answers);
     setShowQuestionnaire(false);
     console.log('Respuestas del cuestionario de recomendaciones:', answers);
+
+    // Llamar al agente de filtrado para obtener recomendaciones
+    if (!user) {
+      console.error('No user found');
+      return;
+    }
+
+    setProcessingRecommendations(true);
+
+    try {
+      // Obtener el usuario de Supabase con múltiples reintentos (el AuthGuard puede estar sincronizando)
+      let supabaseUser = null;
+      let retries = 0;
+      const maxRetries = 6;
+
+      while (!supabaseUser && retries < maxRetries) {
+        supabaseUser = await UserService.getUserByClerkId(user.id);
+
+        if (!supabaseUser) {
+          retries++;
+          console.log(`⏳ Usuario no encontrado, esperando sincronización... (intento ${retries}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+
+      if (!supabaseUser) {
+        console.error('❌ User not found in Supabase after', maxRetries, 'retries');
+        Alert.alert(
+          'Error de Sincronización',
+          'No se pudo sincronizar tu usuario. Por favor cierra sesión y vuelve a iniciar.',
+          [{ text: 'OK' }]
+        );
+        setProcessingRecommendations(false);
+        return;
+      }
+
+      console.log('✅ Usuario de Supabase encontrado:', supabaseUser.id);
+      console.log('Obteniendo recomendaciones del agente de filtrado...');
+
+      // Llamar al agente de filtrado de viajes
+      const recommendations = await AgentsService.getTravelRecommendations({
+        user_id: supabaseUser.id,
+        cuestionario: answers,
+      });
+
+      console.log('Recomendaciones recibidas:', recommendations);
+
+      // Guardar los IDs recomendados
+      setRecommendedTripIds(recommendations.viajes_recomendados || []);
+
+      // Mostrar mensaje de éxito
+      Alert.alert(
+        '¡Recomendaciones Listas!',
+        `Se encontraron ${recommendations.total_recomendados || 0} viajes perfectos para ti. Los verás destacados en la lista.`,
+        [{ text: 'Ver Viajes' }]
+      );
+    } catch (error) {
+      console.error('Error obteniendo recomendaciones:', error);
+      Alert.alert(
+        'Error',
+        'No se pudieron obtener las recomendaciones. Por favor intenta nuevamente.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setProcessingRecommendations(false);
+    }
   };
 
   const handleLike = (tripId: number) => {
@@ -143,11 +424,23 @@ export default function RecommendationsScreen() {
       return matchesSearch && likedTrips.has(trip.id);
     }
 
+    if (selectedCategory === 'recommended') {
+      return matchesSearch && recommendedTripIds.includes(trip.id);
+    }
+
     const matchesCategory = trip.tags.some(tag =>
       tag.toLowerCase().includes(selectedCategory.toLowerCase())
     );
 
     return matchesSearch && matchesCategory;
+  }).sort((a, b) => {
+    // Mostrar primero los viajes recomendados
+    const aIsRecommended = recommendedTripIds.includes(a.id);
+    const bIsRecommended = recommendedTripIds.includes(b.id);
+
+    if (aIsRecommended && !bIsRecommended) return -1;
+    if (!aIsRecommended && bIsRecommended) return 1;
+    return 0;
   });
 
   return (
@@ -205,6 +498,21 @@ export default function RecommendationsScreen() {
               Me gusta
             </Text>
           </TouchableOpacity>
+          {recommendedTripIds.length > 0 && (
+            <TouchableOpacity
+              style={[styles.categoryChip, selectedCategory === 'recommended' && styles.categoryChipActive]}
+              onPress={() => setSelectedCategory('recommended')}
+            >
+              <IconSymbol
+                name="sparkles"
+                size={16}
+                color={selectedCategory === 'recommended' ? '#FFFFFF' : '#374151'}
+              />
+              <Text style={[styles.categoryText, selectedCategory === 'recommended' && styles.categoryTextActive]}>
+                Recomendados
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
         <TouchableOpacity
           style={styles.filterChip}
@@ -288,10 +596,7 @@ export default function RecommendationsScreen() {
         </Text>
 
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#000000" />
-            <Text style={styles.loadingText}>Cargando viajes...</Text>
-          </View>
+          <View style={{ height: 400 }} />
         ) : error ? (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
@@ -304,8 +609,10 @@ export default function RecommendationsScreen() {
             <Text style={styles.emptyText}>No se encontraron viajes disponibles</Text>
           </View>
         ) : (
-          filteredTrips.map((trip, index) => (
-            <View key={trip.id} style={styles.card}>
+          filteredTrips.map((trip, index) => {
+            const isRecommended = recommendedTripIds.includes(trip.id);
+            return (
+            <View key={trip.id} style={[styles.card, isRecommended && styles.cardRecommended]}>
               <View style={styles.imageContainer}>
                 <Image
                   source={{
@@ -317,6 +624,12 @@ export default function RecommendationsScreen() {
                   onError={() => console.log('Image failed to load:', trip.title)}
                   style={styles.cardImage}
                 />
+                {isRecommended && (
+                  <View style={styles.recommendedBadge}>
+                    <IconSymbol name="sparkles" size={14} color="#FFFFFF" />
+                    <Text style={styles.recommendedBadgeText}>Recomendado</Text>
+                  </View>
+                )}
                 <TouchableOpacity
                   style={styles.likeButton}
                   onPress={() => handleLike(trip.id)}
@@ -365,7 +678,8 @@ export default function RecommendationsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          ))
+          );
+          })
         )}
       </ScrollView>
 
@@ -376,6 +690,20 @@ export default function RecommendationsScreen() {
           <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
         </TouchableOpacity>
       </Animated.View>
+
+      {/* Loader de Carga Inicial - Overlay completo */}
+      {loading && (
+        <View style={styles.fullScreenLoader}>
+          <TravelLoader message="Cargando viajes..." />
+        </View>
+      )}
+
+      {/* Loader de Recomendaciones - Overlay completo */}
+      {processingRecommendations && (
+        <View style={styles.fullScreenLoader}>
+          <TravelLoader message="Procesando recomendaciones..." />
+        </View>
+      )}
     </View>
   );
 }
@@ -495,6 +823,29 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
     overflow: 'hidden',
+  },
+  cardRecommended: {
+    borderWidth: 2,
+    borderColor: '#F59E0B',
+    shadowColor: '#F59E0B',
+    shadowOpacity: 0.2,
+  },
+  recommendedBadge: {
+    position: 'absolute',
+    top: 16,
+    left: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 4,
+  },
+  recommendedBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   imageContainer: {
     position: 'relative',
@@ -717,5 +1068,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: '#000000',
+  },
+  fullScreenLoader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
   },
 });

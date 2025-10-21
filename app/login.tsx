@@ -1,8 +1,9 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform } from 'react-native';
-import { useSignIn, useAuth } from '@clerk/clerk-expo';
+import { useSignIn, useAuth, useUser } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
+import { UserService } from '@/lib/userService';
 
 export default function LoginScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -30,14 +31,24 @@ export default function LoginScreen() {
   }, []);
 
   const handleSignIn = async () => {
-    if (!isLoaded) return;
+    if (!isLoaded) {
+      console.log('❌ [Login] Clerk no está cargado');
+      return;
+    }
+
+    console.log('🔑 [Login] Iniciando proceso de login...');
+    console.log('  - Email:', email);
+    console.log('  - Password length:', password.length);
 
     setLoading(true);
     try {
+      console.log('🔑 [Login] Creando sesión con Clerk...');
       const completeSignIn = await signIn.create({
         identifier: email,
         password,
       });
+
+      console.log('🔑 [Login] Respuesta de Clerk:', completeSignIn.status);
 
       if (completeSignIn.status === 'complete') {
         // Intentar activar la sesión, pero manejar el error si ya existe
@@ -48,9 +59,26 @@ export default function LoginScreen() {
           console.log('Session may already exist, continuing...', sessionError.message);
         }
 
+        // IMPORTANTE: Sincronizar con Supabase ANTES de navegar
+        console.log('✅ Inicio de sesión exitoso, sincronizando con Supabase...');
+
+        const userId = completeSignIn.identifier;
+        const userEmail = email; // Ya tenemos el email del form
+
+        if (userId) {
+          const supabaseUser = await UserService.syncClerkUser(userId, userEmail);
+
+          if (supabaseUser) {
+            console.log('✅ Usuario sincronizado con Supabase:', supabaseUser.id);
+          } else {
+            console.error('❌ Error al sincronizar usuario con Supabase');
+            // No bloqueamos el login, solo advertimos
+            console.warn('Continuando sin sincronización...');
+          }
+        }
+
         // Check if user has completed onboarding before
         // For now, we assume existing users go directly to main app
-        // You can add logic here to check user's onboarding status from your database
         const hasCompletedOnboarding = true; // Replace with actual check
 
         if (hasCompletedOnboarding) {

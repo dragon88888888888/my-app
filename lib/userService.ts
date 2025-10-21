@@ -44,6 +44,24 @@ export interface UserTravelPreferences {
   updated_at: string;
 }
 
+export interface AstralProfile {
+  id: number;
+  user_id: number;
+  sun_sign?: string;
+  moon_sign?: string;
+  rising_sign?: string;
+  full_profile?: string;
+  profile_summary?: string;
+  personality_traits?: any;
+  travel_affinities?: any;
+  recommended_destinations?: any;
+  birth_date?: string;
+  birth_time?: string;
+  birth_location?: string;
+  generated_at?: string;
+  updated_at?: string;
+}
+
 export class UserService {
   /**
    * Sincroniza un usuario de Clerk con Supabase
@@ -299,6 +317,29 @@ export class UserService {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error fetching travel preferences:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Obtiene el perfil astrológico completo de un usuario
+   */
+  static async getAstralProfile(userId: number): Promise<AstralProfile | null> {
+    try {
+      const { data, error } = await supabase
+        .from('astral_profiles')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching astral profile:', error);
         return null;
       }
 

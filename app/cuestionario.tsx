@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, Platform, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useUser } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
+import AgentsService from '@/lib/agentsService';
 
 interface Question {
   id: number;
@@ -123,26 +124,27 @@ export default function CuestionarioScreen() {
       answerToSave = selectedDate.toISOString();
     }
 
-    // Solo validar respuesta si la pregunta es obligatoria
-    const shouldSaveAnswer = currentQ.required ? answerToSave.trim() !== '' : true;
+    // Validar si la respuesta es requerida
+    if (currentQ.required && answerToSave.trim() === '') {
+      return; // No continuar si es requerida y está vacía
+    }
 
-    if (shouldSaveAnswer) {
-      // Solo guardar la respuesta si no está vacía
-      if (answerToSave.trim() !== '') {
-        const newAnswers = {
-          ...answers,
-          [currentQ.id]: answerToSave
-        };
-        setAnswers(newAnswers);
-      }
+    // Guardar la respuesta si no está vacía (incluso si es opcional)
+    if (answerToSave.trim() !== '') {
+      const newAnswers = {
+        ...answers,
+        [currentQ.id]: answerToSave
+      };
+      setAnswers(newAnswers);
+    }
 
-      if (currentQuestion < questions.length - 1) {
-        setCurrentQuestion(currentQuestion + 1);
-        setCurrentAnswer('');
-        setSelectedDate(new Date());
-      } else {
-        handleComplete();
-      }
+    // Continuar a la siguiente pregunta o completar
+    if (currentQuestion < questions.length - 1) {
+      setCurrentQuestion(currentQuestion + 1);
+      setCurrentAnswer('');
+      setSelectedDate(new Date());
+    } else {
+      handleComplete();
     }
   };
 
@@ -161,28 +163,129 @@ export default function CuestionarioScreen() {
       return;
     }
 
+    // IMPORTANTE: Guardar la última respuesta antes de completar
+    const currentQ = questions[currentQuestion];
+    let finalAnswers = { ...answers };
+
+    if (currentAnswer.trim() !== '') {
+      let answerToSave = currentAnswer;
+      if (currentQ.type === 'date' || currentQ.type === 'time') {
+        answerToSave = selectedDate.toISOString();
+      }
+      finalAnswers[currentQ.id] = answerToSave;
+    }
+
     setSaving(true);
 
     try {
-      // Obtener el usuario de Supabase
-      const supabaseUser = await UserService.getUserByClerkId(user.id);
+      // Obtener el usuario de Supabase con múltiples reintentos (el AuthGuard puede estar sincronizando)
+      let supabaseUser = null;
+      let retries = 0;
+      const maxRetries = 6;
+
+      while (!supabaseUser && retries < maxRetries) {
+        supabaseUser = await UserService.getUserByClerkId(user.id);
+
+        if (!supabaseUser) {
+          retries++;
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
 
       if (!supabaseUser) {
-        console.error('User not found in Supabase');
-        router.replace('/(tabs)');
+        Alert.alert(
+          'Error de Sincronización',
+          'No se pudo sincronizar tu usuario. Por favor cierra sesión y vuelve a iniciar.',
+          [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+        );
+        setSaving(false);
         return;
       }
 
-      // Guardar las respuestas del cuestionario
-      const result = await UserService.saveAstralQuestionnaire(supabaseUser.id, answers);
+      // Guardar las respuestas del cuestionario usando finalAnswers
+      await UserService.saveAstralQuestionnaire(supabaseUser.id, finalAnswers);
 
-      if (result) {
-        console.log('Cuestionario guardado exitosamente');
-      } else {
-        console.error('Error guardando cuestionario');
+      // Si el usuario proporcionó datos de nacimiento, generar perfil astral
+      const fecha = finalAnswers[4];
+      const hora = finalAnswers[5];
+      const lugar = finalAnswers[6];
+
+      if (fecha) {
+        try {
+
+          // Formatear fecha para el agente (solo YYYY-MM-DD)
+          let fechaFormateada = '';
+          if (typeof fecha === 'string') {
+            // Si es ISO string, extraer solo la fecha
+            if (fecha.includes('T')) {
+              fechaFormateada = fecha.split('T')[0];
+            } else {
+              fechaFormateada = fecha;
+            }
+          } else if (fecha instanceof Date) {
+            fechaFormateada = fecha.toISOString().split('T')[0];
+          }
+
+          // Formatear hora (solo HH:MM)
+          let horaFormateada = undefined;
+          if (hora) {
+            if (typeof hora === 'string') {
+              // Si es ISO string, extraer solo la hora HH:MM
+              if (hora.includes('T')) {
+                const dateObj = new Date(hora);
+                const hours = String(dateObj.getHours()).padStart(2, '0');
+                const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+                horaFormateada = `${hours}:${minutes}`;
+              } else {
+                horaFormateada = hora;
+              }
+            } else if (hora instanceof Date) {
+              const hours = String(hora.getHours()).padStart(2, '0');
+              const minutes = String(hora.getMinutes()).padStart(2, '0');
+              horaFormateada = `${hours}:${minutes}`;
+            }
+          }
+
+          // Formatear lugar (verificar si existe y no está vacío)
+          let lugarFormateado = undefined;
+          if (lugar && typeof lugar === 'string' && lugar.trim() !== '') {
+            lugarFormateado = lugar.trim();
+          }
+
+          // Llamar al agente astral
+          await AgentsService.generateAstroProfile({
+            user_id: supabaseUser.id,
+            nombre: finalAnswers[1] ? String(finalAnswers[1]).trim() : undefined,
+            experiencias_viaje: finalAnswers[2] ? String(finalAnswers[2]).trim() : undefined,
+            transformacion_viaje: finalAnswers[3] ? String(finalAnswers[3]).trim() : undefined,
+            fecha_nacimiento: fechaFormateada,
+            hora_nacimiento: horaFormateada,
+            lugar_nacimiento: lugarFormateado,
+          });
+
+          // Mostrar mensaje de éxito
+          Alert.alert(
+            '¡Perfil Creado!',
+            'Tu perfil astrológico ha sido generado. Puedes verlo en la sección de Perfil.',
+            [{ text: 'OK' }]
+          );
+        } catch (astroError) {
+          console.error('Error generando perfil astral:', astroError);
+          // No bloqueamos el flujo si falla el perfil astral
+          Alert.alert(
+            'Perfil Parcial',
+            'Tus respuestas se guardaron, pero no se pudo generar el perfil astral. Puedes intentarlo más tarde desde tu perfil.',
+            [{ text: 'OK' }]
+          );
+        }
       }
     } catch (error) {
       console.error('Error in handleComplete:', error);
+      Alert.alert(
+        'Error',
+        'Hubo un problema al guardar tu información. Por favor intenta nuevamente.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setSaving(false);
       router.replace('/(tabs)');
