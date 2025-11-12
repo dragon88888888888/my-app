@@ -4,6 +4,8 @@ import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import TripVariantSelector from '@/components/TripVariantSelector';
+import { TripVariantWithRelations } from '@/lib/supabase';
 
 const tripDetailsDatabase = {
   1: {
@@ -62,6 +64,7 @@ const tripDetailsDatabase = {
 export default function TripDetailScreen() {
   const params = useLocalSearchParams();
   const [showHeaderButtons, setShowHeaderButtons] = useState(true);
+  const [selectedVariantId, setSelectedVariantId] = useState<number | undefined>(undefined);
 
   // Get trip data from params
   const tripId = params.tripId ? parseInt(params.tripId as string) : 1;
@@ -69,15 +72,35 @@ export default function TripDetailScreen() {
 
   // Use real trip data if available, otherwise fallback to static data
   let tripDetailData;
+  let tripVariants: TripVariantWithRelations[] | undefined;
+  let baseCurrency = 'USD';
+
   if (tripDataParam) {
     try {
       const realTripData = JSON.parse(tripDataParam);
+      baseCurrency = realTripData.currency || 'USD';
+      tripVariants = realTripData.variants;
+
+      // Si hay variantes y no se ha seleccionado una, selecciona la primera por defecto
+      if (tripVariants && tripVariants.length > 0 && !selectedVariantId) {
+        setSelectedVariantId(tripVariants[0].id);
+      }
+
+      // Determinar el precio a mostrar
+      const displayPrice = selectedVariantId && tripVariants
+        ? tripVariants.find(v => v.id === selectedVariantId)?.price_from || realTripData.price_from
+        : realTripData.price_from;
+
+      const displayCurrency = selectedVariantId && tripVariants
+        ? tripVariants.find(v => v.id === selectedVariantId)?.currency.code || baseCurrency
+        : baseCurrency;
+
       tripDetailData = {
         title: realTripData.title,
         location: realTripData.destinations.join(', '),
         duration: `${realTripData.duration_days} días`,
         groupSize: '6-10 personas', // Default value since it's not in the real data
-        price: `${realTripData.currency === 'MXN' ? '$' : realTripData.currency === 'EUR' ? '€' : '$'}${realTripData.price_from.toLocaleString()}`,
+        price: `${displayCurrency === 'MXN' ? '$' : displayCurrency === 'EUR' ? '€' : '$'}${displayPrice.toLocaleString()}`,
         image: realTripData.image_url || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80',
         blurhash: realTripData.blurhash || 'LHF5}xYk^6#M@-5c,1J5@[or[Q6.',
         experienceProfile: {
@@ -96,6 +119,10 @@ export default function TripDetailScreen() {
   } else {
     tripDetailData = tripDetailsDatabase[tripId as keyof typeof tripDetailsDatabase] || tripDetailsDatabase[1];
   }
+
+  const handleVariantSelect = (variant: TripVariantWithRelations) => {
+    setSelectedVariantId(variant.id);
+  };
 
   const handleBack = () => {
     router.back();
@@ -157,7 +184,7 @@ export default function TripDetailScreen() {
                 <IconSymbol name="heart" size={24} color="#FFFFFF" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-                <IconSymbol name="share" size={24} color="#FFFFFF" />
+                <IconSymbol name="hare" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
           </View>
@@ -187,6 +214,17 @@ export default function TripDetailScreen() {
         <View style={styles.descriptionSection}>
           <Text style={styles.description}>{tripDetailData.description}</Text>
         </View>
+
+        {/* Selector de variantes */}
+        {tripVariants && tripVariants.length > 0 && (
+          <TripVariantSelector
+            variants={tripVariants}
+            selectedVariantId={selectedVariantId}
+            onSelectVariant={handleVariantSelect}
+            basePrice={tripDetailData.price ? parseFloat(tripDetailData.price.replace(/[^0-9.]/g, '')) : 0}
+            baseCurrency={baseCurrency}
+          />
+        )}
 
         <View style={styles.profileSection}>
           <Text style={styles.sectionTitle}>Perfil de la experiencia</Text>

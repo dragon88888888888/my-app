@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, Platform, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, Platform, ActivityIndicator, Alert, Keyboard } from 'react-native';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -254,7 +254,7 @@ export default function CuestionarioScreen() {
 
           // Llamar al agente astral
           await AgentsService.generateAstroProfile({
-            user_id: supabaseUser.id,
+            user_id: supabaseUser.id.toString(),
             nombre: finalAnswers[1] ? String(finalAnswers[1]).trim() : undefined,
             experiencias_viaje: finalAnswers[2] ? String(finalAnswers[2]).trim() : undefined,
             transformacion_viaje: finalAnswers[3] ? String(finalAnswers[3]).trim() : undefined,
@@ -343,6 +343,9 @@ export default function CuestionarioScreen() {
             placeholderTextColor="#9CA3AF"
             multiline={currentQ.type === 'location'}
             numberOfLines={currentQ.type === 'location' ? 2 : 1}
+            returnKeyType="done"
+            blurOnSubmit={true}
+            onSubmitEditing={() => Keyboard.dismiss()}
           />
         );
 
@@ -402,13 +405,13 @@ export default function CuestionarioScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      
+
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} disabled={currentQuestion === 0}>
-          <IconSymbol 
-            name="chevron.left" 
-            size={24} 
-            color={currentQuestion === 0 ? '#E5E7EB' : '#374151'} 
+          <IconSymbol
+            name="chevron.left"
+            size={24}
+            color={currentQuestion === 0 ? '#E5E7EB' : '#374151'}
           />
         </TouchableOpacity>
         <Text style={styles.progressText}>

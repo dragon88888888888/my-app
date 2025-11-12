@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
-import { IconSymbol } from '@/components/ui/IconSymbol';
+import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useUser } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
 import { useRouter } from 'expo-router';
@@ -16,7 +16,7 @@ interface Message {
 
 interface SuggestionCard {
   id: number;
-  icon: string;
+  icon: IconSymbolName;
   title: string;
   prompt: string;
 }
@@ -61,6 +61,15 @@ export default function ChatScreen() {
   useEffect(() => {
     loadUserName();
   }, [user]);
+
+  useEffect(() => {
+    // Auto-scroll cuando se agregan mensajes
+    if (messages.length > 0) {
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages]);
 
   const loadUserName = async () => {
     if (user?.id) {

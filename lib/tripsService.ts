@@ -10,18 +10,19 @@ export class TripsService {
       description: trip.description,
       duration_days: trip.duration_days,
       meals_included: trip.meals_included,
-      destinations: trip.destinations.map(d => d.name),
+      destinations: trip.destinations?.map(d => d.name) || [],
       price_from: trip.price_from,
-      currency: trip.currency.code,
+      currency: trip.currency?.code || 'USD',
       image_url: trip.image_url,
       blurhash: trip.blurhash,
-      tags: trip.tags.map(t => t.name),
-      category: trip.category.name,
-      difficulty_level: trip.difficulty_level.name,
+      tags: trip.tags?.map(t => t.name) || [],
+      category: trip.category?.name || 'Sin categoría',
+      difficulty_level: trip.difficulty_level?.name || 'Sin especificar',
       featured: trip.featured,
       active: trip.active,
       created_at: trip.created_at,
-      updated_at: trip.updated_at
+      updated_at: trip.updated_at,
+      variants: trip.variants || [] // Incluir variantes
     };
   }
 
@@ -41,6 +42,10 @@ export class TripsService {
           ),
           tags:trip_tags(
             tag:tags(*)
+          ),
+          variants:trip_variants(
+            *,
+            currency:currencies(*)
           )
         `)
         .eq('active', true)
@@ -59,7 +64,8 @@ export class TripsService {
           destinations: trip.destinations
             ?.sort((a: any, b: any) => a.order_index - b.order_index)
             .map((td: any) => td.destination) || [],
-          tags: trip.tags?.map((tt: any) => tt.tag) || []
+          tags: trip.tags?.map((tt: any) => tt.tag) || [],
+          variants: trip.variants?.filter((v: any) => v.active) || []
         };
 
         return this.convertToLegacyFormat(tripWithRelations);
@@ -135,6 +141,10 @@ export class TripsService {
           ),
           tags:trip_tags(
             tag:tags(*)
+          ),
+          variants:trip_variants(
+            *,
+            currency:currencies(*)
           )
         `)
         .eq('slug', slug)
@@ -152,7 +162,8 @@ export class TripsService {
         destinations: data.destinations
           ?.sort((a: any, b: any) => a.order_index - b.order_index)
           .map((td: any) => td.destination) || [],
-        tags: data.tags?.map((tt: any) => tt.tag) || []
+        tags: data.tags?.map((tt: any) => tt.tag) || [],
+        variants: data.variants?.filter((v: any) => v.active) || []
       };
 
       return this.convertToLegacyFormat(tripWithRelations);

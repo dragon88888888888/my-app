@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal, Alert } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, ActivityIndicator, Modal, Alert, FlatList, ListRenderItemInfo, TextInput } from 'react-native';
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -223,6 +223,122 @@ const loaderStyles = StyleSheet.create({
   },
 });
 
+// Componente de Tarjeta de Viaje (memoizado para mejor performance)
+const TripCard = React.memo(({
+  trip,
+  isRecommended,
+  isLiked,
+  onPress,
+  onLike
+}: {
+  trip: LegacyTrip;
+  isRecommended: boolean;
+  isLiked: boolean;
+  onPress: () => void;
+  onLike: () => void;
+}) => {
+  // Memoizar cálculos costosos
+  const locationText = React.useMemo(() => {
+    const displayDestinations = trip.destinations.slice(0, 2).join(', ');
+    return trip.destinations.length > 2
+      ? `${displayDestinations} +${trip.destinations.length - 2} más`
+      : displayDestinations;
+  }, [trip.destinations]);
+
+  const priceText = React.useMemo(() => {
+    const symbol = trip.currency === 'MXN' ? '$' : trip.currency === 'EUR' ? '€' : '$';
+    return `Desde ${symbol}${trip.price_from.toLocaleString()}`;
+  }, [trip.currency, trip.price_from]);
+
+  const displayTags = React.useMemo(() => trip.tags.slice(0, 3), [trip.tags]);
+
+  const imageSource = React.useMemo(() => ({
+    uri: trip.image_url || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80'
+  }), [trip.image_url]);
+
+  return (
+    <View style={[styles.card, isRecommended && styles.cardRecommended]}>
+      <View style={styles.imageContainer}>
+        <Image
+          source={imageSource}
+          placeholder={{ blurhash: trip.blurhash }}
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
+          style={styles.cardImage}
+        />
+        {isRecommended && (
+          <View style={styles.recommendedBadge}>
+            <IconSymbol name="sparkles" size={14} color="#FFFFFF" />
+            <Text style={styles.recommendedBadgeText}>Recomendado</Text>
+          </View>
+        )}
+        <TouchableOpacity
+          style={styles.likeButton}
+          onPress={onLike}
+          activeOpacity={0.7}
+        >
+          <IconSymbol
+            name="heart"
+            size={24}
+            color={isLiked ? '#EF4444' : '#FFFFFF'}
+          />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.cardContent}>
+        <Text style={styles.cardTitle} numberOfLines={2}>{trip.title}</Text>
+        <Text style={styles.cardLocation} numberOfLines={1}>
+          {locationText}
+        </Text>
+        <Text style={styles.cardDescription} numberOfLines={3}>{trip.description}</Text>
+
+        <View style={styles.cardInfo}>
+          <View style={styles.infoItem}>
+            <IconSymbol name="dollarsign" size={16} color="#6B7280" />
+            <Text style={styles.infoText}>{priceText}</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <IconSymbol name="calendar" size={16} color="#6B7280" />
+            <Text style={styles.infoText}>{trip.duration_days} días</Text>
+          </View>
+        </View>
+
+        {trip.variants && trip.variants.length > 0 && (
+          <View style={styles.variantsIndicator}>
+            <IconSymbol name="calendar.badge.clock" size={14} color="#6B7280" />
+            <Text style={styles.variantsText}>{trip.variants.length} fechas disponibles</Text>
+          </View>
+        )}
+
+        <View style={styles.tagsContainer}>
+          {displayTags.map((tag, tagIndex) => (
+            <View key={`${trip.id}-${tagIndex}`} style={styles.tag}>
+              <Text style={styles.tagText}>{tag}</Text>
+            </View>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={styles.selectButton}
+          onPress={onPress}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.selectButtonText}>Ver Viaje</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // Función de comparación personalizada para optimizar re-renders
+  return (
+    prevProps.trip.id === nextProps.trip.id &&
+    prevProps.isRecommended === nextProps.isRecommended &&
+    prevProps.isLiked === nextProps.isLiked &&
+    prevProps.trip.price_from === nextProps.trip.price_from &&
+    prevProps.trip.title === nextProps.trip.title
+  );
+});
+
 export default function RecommendationsScreen() {
   const { user } = useUser();
   const [trips, setTrips] = useState<LegacyTrip[]>([]);
@@ -241,15 +357,19 @@ export default function RecommendationsScreen() {
 
   const aiButtonOpacity = useSharedValue(0);
   const aiButtonTranslateY = useSharedValue(100);
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const filterCategories = [
-    { id: 'adventure', label: 'Aventura', icon: 'leaf.fill' },
-    { id: 'culture', label: 'Cultura', icon: 'sparkles' },
-    { id: 'beach', label: 'Playa', icon: 'location.fill' },
-    { id: 'mountain', label: 'Montaña', icon: 'location.fill' },
-    { id: 'city', label: 'Ciudad', icon: 'location.fill' },
-    { id: 'spiritual', label: 'Espiritual', icon: 'sparkles' },
+    { id: 'aventura', label: 'Aventura', icon: 'figure.hiking' },
+    { id: 'cultura', label: 'Cultura', icon: 'building.columns' },
+    { id: 'playa', label: 'Playa', icon: 'beach.umbrella' },
+    { id: 'montaña', label: 'Montaña', icon: 'mountain.2' },
+    { id: 'ciudad', label: 'Ciudad', icon: 'building.2' },
+    { id: 'espiritual', label: 'Espiritual', icon: 'sparkles' },
+    { id: 'naturaleza', label: 'Naturaleza', icon: 'leaf' },
+    { id: 'romántico', label: 'Romántico', icon: 'heart' },
+    { id: 'familia', label: 'Familia', icon: 'person.3' },
+    { id: 'gastronomía', label: 'Gastronomía', icon: 'fork.knife' },
   ];
 
   useEffect(() => {
@@ -257,17 +377,26 @@ export default function RecommendationsScreen() {
   }, []);
 
   useEffect(() => {
+    // Inicializar los valores en 0 y 100 al montar el componente
+    aiButtonOpacity.value = 0;
+    aiButtonTranslateY.value = 100;
+  }, []);
+
+  useEffect(() => {
     if (showAIButton) {
-      aiButtonOpacity.value = withTiming(1, { duration: 400 });
+      // Animar la aparición
+      aiButtonOpacity.value = withTiming(1, { duration: 500 });
       aiButtonTranslateY.value = withSpring(0, {
-        damping: 15,
-        stiffness: 100,
+        damping: 20,
+        stiffness: 150,
       });
 
+      // Auto-ocultar después de 15 segundos
       hideTimeoutRef.current = setTimeout(() => {
         hideAIButton();
       }, 15000);
     } else {
+      // Animar la desaparición
       aiButtonOpacity.value = withTiming(0, { duration: 300 });
       aiButtonTranslateY.value = withTiming(100, { duration: 300 });
     }
@@ -304,12 +433,12 @@ export default function RecommendationsScreen() {
     }
   };
 
-  const handleTripSelect = (trip: LegacyTrip) => {
+  const handleTripSelect = useCallback((trip: LegacyTrip) => {
     router.push({
       pathname: '/trip-detail',
       params: { tripId: trip.id, tripData: JSON.stringify(trip) }
     });
-  };
+  }, [router]);
 
   const handleQuestionnaireComplete = async (answers: { [key: number]: string }) => {
     setQuestionnaireAnswers(answers);
@@ -341,7 +470,7 @@ export default function RecommendationsScreen() {
       }
 
       if (!supabaseUser) {
-        console.error('❌ User not found in Supabase after', maxRetries, 'retries');
+        console.error(' User not found in Supabase after', maxRetries, 'retries');
         Alert.alert(
           'Error de Sincronización',
           'No se pudo sincronizar tu usuario. Por favor cierra sesión y vuelve a iniciar.',
@@ -351,12 +480,12 @@ export default function RecommendationsScreen() {
         return;
       }
 
-      console.log('✅ Usuario de Supabase encontrado:', supabaseUser.id);
+      console.log(' Usuario de Supabase encontrado:', supabaseUser.id);
       console.log('Obteniendo recomendaciones del agente de filtrado...');
 
       // Llamar al agente de filtrado de viajes
       const recommendations = await AgentsService.getTravelRecommendations({
-        user_id: supabaseUser.id,
+        user_id: supabaseUser.id.toString(),
         cuestionario: answers,
       });
 
@@ -383,7 +512,7 @@ export default function RecommendationsScreen() {
     }
   };
 
-  const handleLike = (tripId: number) => {
+  const handleLike = useCallback((tripId: number) => {
     setLikedTrips(prev => {
       const newSet = new Set(prev);
       if (newSet.has(tripId)) {
@@ -393,15 +522,15 @@ export default function RecommendationsScreen() {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  const handleScroll = (event: any) => {
+  const handleScroll = useCallback((event: any) => {
     const scrollY = event.nativeEvent.contentOffset.y;
 
     if (scrollY > 100 && !showAIButton && !hasShownAIButton) {
       setShowAIButton(true);
     }
-  };
+  }, [showAIButton, hasShownAIButton]);
 
   const aiButtonStyle = useAnimatedStyle(() => {
     return {
@@ -410,29 +539,38 @@ export default function RecommendationsScreen() {
     };
   });
 
-  if (showQuestionnaire) {
-    return <RecommendationsQuestionnaire onComplete={handleQuestionnaireComplete} />;
-  }
-
+  // Calcular filteredTrips primero, antes de definir los callbacks que lo usan
+  // IMPORTANTE: Esto debe estar antes de cualquier return condicional para evitar errores de hooks
   const filteredTrips = trips.filter(trip => {
-    const matchesSearch = trip.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      trip.destinations.some(dest => dest.toLowerCase().includes(searchQuery.toLowerCase()));
+    // Búsqueda por texto en título, destinos, descripción, categoría y tags
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = searchQuery === '' ||
+      trip.title.toLowerCase().includes(searchLower) ||
+      trip.destinations.some(dest => dest.toLowerCase().includes(searchLower)) ||
+      trip.description.toLowerCase().includes(searchLower) ||
+      trip.category.toLowerCase().includes(searchLower) ||
+      trip.tags.some(tag => tag.toLowerCase().includes(searchLower));
 
-    if (selectedCategory === 'all') return matchesSearch;
+    // Si no hay búsqueda de texto, no mostrar ningún resultado
+    if (!matchesSearch) return false;
+
+    // Filtro de categoría
+    if (selectedCategory === 'all') return true;
 
     if (selectedCategory === 'liked') {
-      return matchesSearch && likedTrips.has(trip.id);
+      return likedTrips.has(trip.id);
     }
 
     if (selectedCategory === 'recommended') {
-      return matchesSearch && recommendedTripIds.includes(trip.id);
+      return recommendedTripIds.includes(trip.id);
     }
 
-    const matchesCategory = trip.tags.some(tag =>
-      tag.toLowerCase().includes(selectedCategory.toLowerCase())
-    );
+    // Filtro por categoría o tags
+    const matchesCategory =
+      trip.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
+      trip.tags.some(tag => tag.toLowerCase().includes(selectedCategory.toLowerCase()));
 
-    return matchesSearch && matchesCategory;
+    return matchesCategory;
   }).sort((a, b) => {
     // Mostrar primero los viajes recomendados
     const aIsRecommended = recommendedTripIds.includes(a.id);
@@ -442,6 +580,80 @@ export default function RecommendationsScreen() {
     if (!aIsRecommended && bIsRecommended) return 1;
     return 0;
   });
+
+  // Callbacks que dependen de filteredTrips
+  const renderTripCard = useCallback(({ item }: ListRenderItemInfo<LegacyTrip>) => {
+    const isRecommended = recommendedTripIds.includes(item.id);
+    const isLiked = likedTrips.has(item.id);
+
+    return (
+      <TripCard
+        trip={item}
+        isRecommended={isRecommended}
+        isLiked={isLiked}
+        onPress={() => handleTripSelect(item)}
+        onLike={() => handleLike(item.id)}
+      />
+    );
+  }, [recommendedTripIds, likedTrips, handleLike, handleTripSelect]);
+
+  const keyExtractor = useCallback((item: LegacyTrip) => item.id.toString(), []);
+
+  const ListHeaderComponent = useCallback(() => (
+    <Text style={styles.resultsText}>
+      {filteredTrips.length} destinos encontrados
+    </Text>
+  ), [filteredTrips.length]);
+
+  const ListEmptyComponent = useCallback(() => {
+    if (loading) return <View style={{ height: 400 }} />;
+    if (error) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadTrips}>
+            <Text style={styles.retryButtonText}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // Mensaje personalizado según el contexto
+    let emptyMessage = 'No se encontraron viajes disponibles';
+    if (searchQuery) {
+      emptyMessage = `No encontramos viajes que coincidan con "${searchQuery}"`;
+    } else if (selectedCategory === 'liked') {
+      emptyMessage = 'Aún no tienes viajes favoritos';
+    } else if (selectedCategory === 'recommended') {
+      emptyMessage = 'No hay recomendaciones disponibles';
+    } else if (selectedCategory !== 'all') {
+      const category = filterCategories.find(c => c.id === selectedCategory);
+      emptyMessage = `No hay viajes en la categoría "${category?.label || selectedCategory}"`;
+    }
+
+    return (
+      <View style={styles.emptyContainer}>
+        <IconSymbol name="magnifyingglass" size={48} color="#D1D5DB" />
+        <Text style={styles.emptyText}>{emptyMessage}</Text>
+        {(searchQuery || selectedCategory !== 'all') && (
+          <TouchableOpacity
+            style={styles.clearSearchButton}
+            onPress={() => {
+              setSearchQuery('');
+              setSelectedCategory('all');
+            }}
+          >
+            <Text style={styles.clearSearchButtonText}>Limpiar búsqueda</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }, [loading, error, searchQuery, selectedCategory, filterCategories]);
+
+  // Return condicional del cuestionario DESPUÉS de todos los hooks
+  if (showQuestionnaire) {
+    return <RecommendationsQuestionnaire onComplete={handleQuestionnaireComplete} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -461,7 +673,20 @@ export default function RecommendationsScreen() {
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <IconSymbol name="magnifyingglass" size={20} color="#9CA3AF" />
-        <Text style={styles.searchInput}>Busca tu destino soñado...</Text>
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Busca tu destino soñado..."
+          placeholderTextColor="#9CA3AF"
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')}>
+            <IconSymbol name="xmark.circle.fill" size={20} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Category Filters */}
@@ -515,14 +740,22 @@ export default function RecommendationsScreen() {
           )}
         </ScrollView>
         <TouchableOpacity
-          style={styles.filterChip}
+          style={[
+            styles.filterChip,
+            selectedCategory !== 'all' && selectedCategory !== 'liked' && selectedCategory !== 'recommended' && styles.filterChipActive
+          ]}
           onPress={() => setShowFiltersModal(true)}
         >
           <IconSymbol
             name="slider.horizontal.3"
             size={18}
-            color="#111827"
+            color={selectedCategory !== 'all' && selectedCategory !== 'liked' && selectedCategory !== 'recommended' ? '#FFFFFF' : '#111827'}
           />
+          {selectedCategory !== 'all' && selectedCategory !== 'liked' && selectedCategory !== 'recommended' && (
+            <View style={styles.filterBadge}>
+              <Text style={styles.filterBadgeText}>1</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -541,9 +774,22 @@ export default function RecommendationsScreen() {
           <View style={styles.modalContent} onStartShouldSetResponder={() => true}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Filtros</Text>
-              <TouchableOpacity onPress={() => setShowFiltersModal(false)}>
-                <IconSymbol name="chevron.down" size={24} color="#111827" />
-              </TouchableOpacity>
+              <View style={styles.modalHeaderRight}>
+                {selectedCategory !== 'all' && selectedCategory !== 'liked' && selectedCategory !== 'recommended' && (
+                  <TouchableOpacity
+                    style={styles.clearFiltersButton}
+                    onPress={() => {
+                      setSelectedCategory('all');
+                      setShowFiltersModal(false);
+                    }}
+                  >
+                    <Text style={styles.clearFiltersText}>Limpiar</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity onPress={() => setShowFiltersModal(false)}>
+                  <IconSymbol name="chevron.down" size={24} color="#111827" />
+                </TouchableOpacity>
+              </View>
             </View>
 
             <ScrollView style={styles.filtersList}>
@@ -584,112 +830,38 @@ export default function RecommendationsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <ScrollView
-        style={styles.scrollContainer}
+      <FlatList
+        data={filteredTrips}
+        renderItem={renderTripCard}
+        keyExtractor={keyExtractor}
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={ListEmptyComponent}
+        contentContainerStyle={styles.flatListContent}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
         onScroll={handleScroll}
         scrollEventThrottle={16}
-      >
-        <Text style={styles.resultsText}>
-          {filteredTrips.length} destinos encontrados
-        </Text>
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={3}
+        updateCellsBatchingPeriod={100}
+        initialNumToRender={3}
+        windowSize={5}
+        getItemLayout={(data, index) => ({
+          length: 520,
+          offset: 520 * index,
+          index,
+        })}
+      />
 
-        {loading ? (
-          <View style={{ height: 400 }} />
-        ) : error ? (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadTrips}>
-              <Text style={styles.retryButtonText}>Reintentar</Text>
-            </TouchableOpacity>
-          </View>
-        ) : filteredTrips.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No se encontraron viajes disponibles</Text>
-          </View>
-        ) : (
-          filteredTrips.map((trip, index) => {
-            const isRecommended = recommendedTripIds.includes(trip.id);
-            return (
-            <View key={trip.id} style={[styles.card, isRecommended && styles.cardRecommended]}>
-              <View style={styles.imageContainer}>
-                <Image
-                  source={{
-                    uri: trip.image_url || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=800&q=80'
-                  }}
-                  placeholder={{ blurhash: trip.blurhash }}
-                  contentFit="cover"
-                  transition={200}
-                  onError={() => console.log('Image failed to load:', trip.title)}
-                  style={styles.cardImage}
-                />
-                {isRecommended && (
-                  <View style={styles.recommendedBadge}>
-                    <IconSymbol name="sparkles" size={14} color="#FFFFFF" />
-                    <Text style={styles.recommendedBadgeText}>Recomendado</Text>
-                  </View>
-                )}
-                <TouchableOpacity
-                  style={styles.likeButton}
-                  onPress={() => handleLike(trip.id)}
-                >
-                  <IconSymbol
-                    name="heart"
-                    size={24}
-                    color={likedTrips.has(trip.id) ? '#EF4444' : '#FFFFFF'}
-                  />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle}>{trip.title}</Text>
-                <Text style={styles.cardLocation}>
-                  {trip.destinations.slice(0, 2).join(', ')}
-                  {trip.destinations.length > 2 && ` +${trip.destinations.length - 2} más`}
-                </Text>
-                <Text style={styles.cardDescription}>{trip.description}</Text>
-
-                <View style={styles.cardInfo}>
-                  <View style={styles.infoItem}>
-                    <IconSymbol name="dollarsign" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>
-                      Desde {trip.currency === 'MXN' ? '$' : trip.currency === 'EUR' ? '€' : '$'}{trip.price_from.toLocaleString()}
-                    </Text>
-                  </View>
-                  <View style={styles.infoItem}>
-                    <IconSymbol name="calendar" size={16} color="#6B7280" />
-                    <Text style={styles.infoText}>{trip.duration_days} días</Text>
-                  </View>
-                </View>
-
-                <View style={styles.tagsContainer}>
-                  {trip.tags.slice(0, 3).map((tag, tagIndex) => (
-                    <View key={tagIndex} style={styles.tag}>
-                      <Text style={styles.tagText}>{tag}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <TouchableOpacity
-                  style={styles.selectButton}
-                  onPress={() => handleTripSelect(trip)}
-                >
-                  <Text style={styles.selectButtonText}>Ver Viaje</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          );
-          })
-        )}
-      </ScrollView>
-
-      <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle]}>
-        <TouchableOpacity style={styles.aiButton} onPress={handleExploreWithAI}>
-          <IconSymbol name="magnifyingglass" size={20} color="#FFFFFF" />
-          <Text style={styles.aiButtonText}>Explorar Viaje con IA</Text>
-          <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-      </Animated.View>
+      {/* Botón flotante "Explorar con IA" - solo renderizar cuando está visible */}
+      {showAIButton && (
+        <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle]} pointerEvents="auto">
+          <TouchableOpacity style={styles.aiButton} onPress={handleExploreWithAI}>
+            <IconSymbol name="magnifyingglass" size={20} color="#FFFFFF" />
+            <Text style={styles.aiButtonText}>Explorar Viaje con IA</Text>
+            <IconSymbol name="chevron.right" size={20} color="#FFFFFF" />
+          </TouchableOpacity>
+        </Animated.View>
+      )}
 
       {/* Loader de Carga Inicial - Overlay completo */}
       {loading && (
@@ -753,8 +925,10 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   searchInput: {
+    flex: 1,
     fontSize: 15,
-    color: '#9CA3AF',
+    color: '#111827',
+    paddingVertical: 0,
   },
   categoriesWrapper: {
     flexDirection: 'row',
@@ -800,13 +974,55 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     justifyContent: 'center',
     alignItems: 'center',
+    position: 'relative',
+  },
+  filterChipActive: {
+    backgroundColor: '#111827',
+  },
+  filterBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  filterBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   scrollContainer: {
     flex: 1,
   },
+  flatListContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 100,
+  },
   scrollContent: {
     paddingHorizontal: 24,
     paddingBottom: 100,
+  },
+  variantsIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  variantsText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
   },
   resultsText: {
     fontSize: 13,
@@ -993,11 +1209,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingVertical: 60,
+    gap: 16,
   },
   emptyText: {
     fontSize: 16,
     color: '#6B7280',
     textAlign: 'center',
+    paddingHorizontal: 40,
+  },
+  clearSearchButton: {
+    marginTop: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#111827',
+    borderRadius: 12,
+  },
+  clearSearchButtonText: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -1020,6 +1250,22 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#E5E7EB',
+  },
+  modalHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  clearFiltersButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+  },
+  clearFiltersText: {
+    fontSize: 14,
+    color: '#111827',
+    fontWeight: '600',
   },
   modalTitle: {
     fontSize: 20,

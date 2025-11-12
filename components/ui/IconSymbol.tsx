@@ -5,9 +5,6 @@ import { SymbolWeight, SymbolViewProps } from 'expo-symbols';
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
-type IconSymbolName = keyof typeof MAPPING;
-
 /**
  * Add your SF Symbols to Material Icons mappings here.
  * - see Material Icons in the [Icons Directory](https://icons.expo.fyi).
@@ -27,7 +24,6 @@ const MAPPING = {
   'gearshape.fill': 'settings',
   'dollarsign': 'attach-money',
   'calendar': 'calendar-today',
-  'add': 'add',
   'add.circle': 'add-circle',
   'plus': 'add',
   'heart': 'favorite-border',
@@ -44,7 +40,17 @@ const MAPPING = {
   'line.3.horizontal.decrease': 'filter-list',
   'chevron.down': 'keyboard-arrow-down',
   'slider.horizontal.3': 'tune',
-} as IconMapping;
+  'airplane': 'flight',
+  'calendar.badge.clock': 'schedule',
+  'xmark.circle.fill': 'cancel',
+  'clock': 'schedule',
+  'hare': 'share',
+  'eye': 'visibility',
+  'eye.slash': 'visibility-off',
+  'checkmark.circle.fill': 'check-circle',
+} as const;
+
+export type IconSymbolName = keyof typeof MAPPING;
 
 /**
  * An icon component that uses native SF Symbols on iOS, and Material Icons on Android and web.

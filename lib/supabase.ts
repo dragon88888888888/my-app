@@ -70,6 +70,28 @@ export interface Destination {
   created_at: string;
 }
 
+// Variantes de viajes (fechas específicas, tipos)
+export interface TripVariant {
+  id: number;
+  trip_id: number;
+  variant_name: string;
+  variant_type?: string;
+  price_from: number;
+  currency_id: number;
+  specific_details?: any; // JSONB
+  original_title?: string;
+  original_slug?: string;
+  image_url?: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// Variante con relaciones
+export interface TripVariantWithRelations extends TripVariant {
+  currency: Currency;
+}
+
 // Tabla principal de viajes
 export interface Trip {
   id: number;
@@ -100,6 +122,7 @@ export interface TripWithRelations extends Trip {
   difficulty_level: DifficultyLevel;
   destinations: Destination[];
   tags: Tag[];
+  variants?: TripVariantWithRelations[]; // Nueva propiedad
   best_months?: number[];
   includes?: string[];
   excludes?: string[];
@@ -125,6 +148,7 @@ export interface LegacyTrip {
   active: boolean;
   created_at: string;
   updated_at: string;
+  variants?: TripVariantWithRelations[]; // Variantes del viaje
 }
 
 // Tipos para tablas de usuarios (ya están definidos en userService.ts)

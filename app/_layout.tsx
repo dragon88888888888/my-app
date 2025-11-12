@@ -1,7 +1,10 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { Platform, AppState } from 'react-native';
+import * as NavigationBar from 'expo-navigation-bar';
+import { useEffect, useRef } from 'react';
 // import 'react-native-reanimated'; // Comentado para compatibilidad con Expo Go
 import { ClerkProvider } from '@clerk/clerk-expo';
 import { tokenCache } from '@clerk/clerk-expo/token-cache';
@@ -11,9 +14,50 @@ import { useSupabaseAuth } from '@/lib/useSupabaseAuth';
 
 function RootLayoutNav() {
   const colorScheme = useColorScheme();
+  const pathname = usePathname();
+  const appState = useRef(AppState.currentState);
 
   // Sincronizar tokens de Clerk con Supabase
   useSupabaseAuth();
+
+  // Función para ocultar la barra de navegación de Android
+  const hideNavigationBar = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        await NavigationBar.setVisibilityAsync('hidden');
+        await NavigationBar.setBehaviorAsync('overlay-swipe');
+        await NavigationBar.setBackgroundColorAsync('#FFFFFF00'); // Transparente
+        await NavigationBar.setPositionAsync('absolute');
+      } catch (error) {
+        console.error('Error ocultando barra de navegación:', error);
+      }
+    }
+  };
+
+  // Ocultar la barra de navegación de Android en TODAS las pantallas
+  useEffect(() => {
+    hideNavigationBar();
+  }, [pathname]); // Se ejecuta cada vez que cambia la ruta
+
+  // Mantener la barra oculta cuando la app regresa al foreground
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const subscription = AppState.addEventListener('change', (nextAppState) => {
+        if (
+          appState.current.match(/inactive|background/) &&
+          nextAppState === 'active'
+        ) {
+          // La app ha regresado al foreground
+          hideNavigationBar();
+        }
+        appState.current = nextAppState;
+      });
+
+      return () => {
+        subscription.remove();
+      };
+    }
+  }, []);
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
