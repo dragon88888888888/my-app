@@ -1,0 +1,39 @@
+{
+  "cli": {
+    "version": ">= 16.24.1",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_aW50ZXJuYWwtZGFuZS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://cjgcbltewsqmittjugja.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqZ2NibHRld3NxbWl0dGp1Z2phIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDgwMDQsImV4cCI6MjA3MzgyNDAwNH0.qVgJ7gELnygEju7mLO6tLcj2yU6bZ0m9hc8y2ZnjEQA",
+        "EXPO_PUBLIC_LANGGRAPH_URL": "https://footage-automatic-processed-choice.trycloudflare.com"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_aW50ZXJuYWwtZGFuZS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://cjgcbltewsqmittjugja.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqZ2NibHRld3NxbWl0dGp1Z2phIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDgwMDQsImV4cCI6MjA3MzgyNDAwNH0.qVgJ7gELnygEju7mLO6tLcj2yU6bZ0m9hc8y2ZnjEQA",
+        "EXPO_PUBLIC_LANGGRAPH_URL": "https://footage-automatic-processed-choice.trycloudflare.com"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_aW50ZXJuYWwtZGFuZS0zNi5jbGVyay5hY2NvdW50cy5kZXYk",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://cjgcbltewsqmittjugja.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqZ2NibHRld3NxbWl0dGp1Z2phIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDgwMDQsImV4cCI6MjA3MzgyNDAwNH0.qVgJ7gELnygEju7mLO6tLcj2yU6bZ0m9hc8y2ZnjEQA",
+        "EXPO_PUBLIC_LANGGRAPH_URL": "https://footage-automatic-processed-choice.trycloudflare.com"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

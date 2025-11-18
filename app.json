@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "my-app",
+    "name": "Nova",
     "slug": "my-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,7 +10,11 @@
     "newArchEnabled": true,
     "bundleIdentifier": "com.anonymous.myapp",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.anonymous.myapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {

@@ -42,3 +42,5 @@ app-example
 CLAUDE.md
 .claude
 .mcp.json
+
+eas.json
