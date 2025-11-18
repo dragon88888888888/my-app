@@ -1,13 +1,19 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform, ActivityIndicator, Keyboard } from 'react-native';
-import { useSignUp, useAuth } from '@clerk/clerk-expo';
+import { useSignUp, useOAuth } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { UserService } from '@/lib/userService';
 
+WebBrowser.maybeCompleteAuthSession();
+
 export default function SignUpScreen() {
   const { signUp, setActive, isLoaded } = useSignUp();
-  const { signOut, isSignedIn } = useAuth();
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startFacebookOAuth } = useOAuth({ strategy: 'oauth_facebook' });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,24 +23,13 @@ export default function SignUpScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Cerrar sesión si el usuario ya está autenticado
   useEffect(() => {
-    const handleSignOut = async () => {
-      if (isSignedIn) {
-        try {
-          await signOut();
-          console.log('✅ Sesión anterior cerrada en signup');
-        } catch (error) {
-          console.error('Error al cerrar sesión anterior:', error);
-        }
-      }
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
     };
-
-    handleSignOut();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll cuando aparece el teclado
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       'keyboardDidShow',
@@ -52,28 +47,20 @@ export default function SignUpScreen() {
 
   const handleSignUp = async () => {
     if (!isLoaded) {
-      console.log('❌ [Signup] Clerk no está cargado');
       return;
     }
 
-    console.log('📝 [Signup] Iniciando creación de cuenta...');
-    console.log('  - Email:', email);
-    console.log('  - Password length:', password.length);
-
     setLoading(true);
     try {
-      console.log('📝 [Signup] Creando cuenta en Clerk...');
       await signUp.create({
         emailAddress: email,
         password,
       });
 
-      console.log('📝 [Signup] Cuenta creada, preparando verificación...');
       await signUp.prepareEmailAddressVerification({ strategy: 'email_code' });
-      console.log('✅ [Signup] Email de verificación enviado');
       setPendingVerification(true);
     } catch (err: any) {
-      console.error('❌ [Signup] Error:', err);
+      console.error(JSON.stringify(err, null, 2));
       Alert.alert('Error', err.errors?.[0]?.message || 'Error al crear cuenta');
     } finally {
       setLoading(false);
@@ -81,70 +68,116 @@ export default function SignUpScreen() {
   };
 
   const handleVerification = async () => {
-    if (!isLoaded) {
-      console.log('❌ [Signup] Clerk no está cargado para verificación');
-      return;
-    }
-
-    console.log('🔐 [Signup] Verificando código:', code);
+    if (!isLoaded) return;
 
     setLoading(true);
     try {
-      const completeSignUp = await signUp.attemptEmailAddressVerification({
+      const signUpAttempt = await signUp.attemptEmailAddressVerification({
         code,
       });
 
-      console.log('🔐 [Signup] Estado de verificación:', completeSignUp.status);
+      if (signUpAttempt.status === 'complete') {
+        await setActive({ session: signUpAttempt.createdSessionId });
 
-      if (completeSignUp.status === 'complete') {
-        await setActive({ session: completeSignUp.createdSessionId });
+        const userId = signUpAttempt.createdUserId;
+        const emailAddress = signUpAttempt.emailAddress;
 
-        // IMPORTANTE: Sincronizar con Supabase ANTES de navegar al cuestionario
-        console.log('✅ Cuenta verificada, sincronizando con Supabase...');
-
-        const user = completeSignUp.createdUserId;
-        const emailAddress = completeSignUp.emailAddress;
-
-        if (user) {
-          const supabaseUser = await UserService.syncClerkUser(user, emailAddress || undefined);
-
-          if (supabaseUser) {
-            console.log('✅ Usuario sincronizado con Supabase:', supabaseUser.id);
-          } else {
-            console.error('❌ Error al sincronizar usuario con Supabase');
-            Alert.alert(
-              'Error de Sincronización',
-              'Tu cuenta fue creada pero hubo un problema al sincronizar. Por favor cierra la app e intenta nuevamente.',
-              [{ text: 'OK' }]
-            );
-            setLoading(false);
-            return;
-          }
+        if (userId && emailAddress) {
+          await UserService.syncClerkUser(userId, emailAddress);
         }
 
         router.replace('/cuestionario');
       } else {
-        console.log('Sign up incomplete:', completeSignUp);
+        console.error(JSON.stringify(signUpAttempt, null, 2));
       }
     } catch (err: any) {
+      console.error(JSON.stringify(err, null, 2));
       Alert.alert('Error', err.errors?.[0]?.message || 'Código de verificación inválido');
     } finally {
       setLoading(false);
     }
   };
 
-  // OAuth handlers - Temporarily disabled until properly configured
   const onGoogleSignUp = useCallback(async () => {
-    Alert.alert('Google OAuth', 'Google OAuth será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, signIn, signUp: oAuthSignUp, setActive: setActiveOAuth } = await startGoogleOAuth({
+        redirectUrl: Linking.createURL('/cuestionario', { scheme: 'myapp' }),
+      });
+
+      if (createdSessionId) {
+        await setActiveOAuth({ session: createdSessionId });
+
+        const userId = signIn?.createdUserId || oAuthSignUp?.createdUserId;
+        if (userId) {
+          const emailAddress = signIn?.emailAddress || oAuthSignUp?.emailAddress;
+          if (emailAddress) {
+            await UserService.syncClerkUser(userId, emailAddress);
+          }
+        }
+
+        router.replace('/cuestionario');
+      } else {
+        console.log('OAuth requiere pasos adicionales:', { signIn, signUp: oAuthSignUp });
+      }
+    } catch (err: any) {
+      console.error('Error en Google OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al registrarse con Google');
+    }
+  }, [startGoogleOAuth]);
 
   const onAppleSignUp = useCallback(async () => {
-    Alert.alert('Apple OAuth', 'Apple Sign In será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, signIn, signUp: oAuthSignUp, setActive: setActiveOAuth } = await startAppleOAuth({
+        redirectUrl: Linking.createURL('/cuestionario', { scheme: 'myapp' }),
+      });
+
+      if (createdSessionId) {
+        await setActiveOAuth({ session: createdSessionId });
+
+        const userId = signIn?.createdUserId || oAuthSignUp?.createdUserId;
+        if (userId) {
+          const emailAddress = signIn?.emailAddress || oAuthSignUp?.emailAddress;
+          if (emailAddress) {
+            await UserService.syncClerkUser(userId, emailAddress);
+          }
+        }
+
+        router.replace('/cuestionario');
+      } else {
+        console.log('OAuth requiere pasos adicionales:', { signIn, signUp: oAuthSignUp });
+      }
+    } catch (err: any) {
+      console.error('Error en Apple OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al registrarse con Apple');
+    }
+  }, [startAppleOAuth]);
 
   const onFacebookSignUp = useCallback(async () => {
-    Alert.alert('Facebook OAuth', 'Facebook Login será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, signIn, signUp: oAuthSignUp, setActive: setActiveOAuth } = await startFacebookOAuth({
+        redirectUrl: Linking.createURL('/cuestionario', { scheme: 'myapp' }),
+      });
+
+      if (createdSessionId) {
+        await setActiveOAuth({ session: createdSessionId });
+
+        const userId = signIn?.createdUserId || oAuthSignUp?.createdUserId;
+        if (userId) {
+          const emailAddress = signIn?.emailAddress || oAuthSignUp?.emailAddress;
+          if (emailAddress) {
+            await UserService.syncClerkUser(userId, emailAddress);
+          }
+        }
+
+        router.replace('/cuestionario');
+      } else {
+        console.log('OAuth requiere pasos adicionales:', { signIn, signUp: oAuthSignUp });
+      }
+    } catch (err: any) {
+      console.error('Error en Facebook OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al registrarse con Facebook');
+    }
+  }, [startFacebookOAuth]);
 
   return (
     <KeyboardAvoidingView

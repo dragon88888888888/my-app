@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, StatusBar, KeyboardAvoidingView, Platform, ActivityIndicator, Modal, Animated } from 'react-native';
 import { IconSymbol, type IconSymbolName } from '@/components/ui/IconSymbol';
 import { useUser } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
 import { useRouter } from 'expo-router';
 import AgentsService from '@/lib/agentsService';
+import ChatHistoryService, { type Conversation } from '@/lib/chatHistoryService';
 import Markdown from 'react-native-markdown-display';
 
 interface Message {
@@ -53,17 +54,21 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [userName, setUserName] = useState('');
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loadingConversations, setLoadingConversations] = useState(false);
   const { user } = useUser();
   const router = useRouter();
   const scrollViewRef = useRef<ScrollView>(null);
+  const slideAnim = useRef(new Animated.Value(-320)).current;
 
   useEffect(() => {
     loadUserName();
   }, [user]);
 
   useEffect(() => {
-    // Auto-scroll cuando se agregan mensajes
     if (messages.length > 0) {
       setTimeout(() => {
         scrollViewRef.current?.scrollToEnd({ animated: true });
@@ -71,15 +76,85 @@ export default function ChatScreen() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (sidebarVisible) {
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        useNativeDriver: Platform.OS !== 'web',
+        tension: 65,
+        friction: 11,
+      }).start();
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: -320,
+        duration: 250,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    }
+  }, [sidebarVisible]);
+
   const loadUserName = async () => {
     if (user?.id) {
       const supabaseUser = await UserService.getUserByClerkId(user.id);
       if (supabaseUser?.name) {
         setUserName(supabaseUser.name);
       } else {
-        // Fallback al nombre de Clerk
         setUserName(user.firstName || '');
       }
+    }
+  };
+
+  const loadConversations = async () => {
+    try {
+      setLoadingConversations(true);
+      if (!user?.id) return;
+
+      const supabaseUser = await UserService.getUserByClerkId(user.id);
+      if (!supabaseUser) return;
+
+      const userConversations = await ChatHistoryService.getUserConversations(supabaseUser.id);
+      setConversations(userConversations);
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  const handleOpenSidebar = () => {
+    setSidebarVisible(true);
+    loadConversations();
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setThreadId(null);
+    setConversationId(null);
+    setSidebarVisible(false);
+  };
+
+  const handleLoadConversation = async (conversation: Conversation) => {
+    try {
+      setSidebarVisible(false);
+      setLoading(true);
+
+      const dbMessages = await ChatHistoryService.getConversationMessages(conversation.id);
+
+      setThreadId(conversation.thread_id);
+      setConversationId(conversation.id);
+
+      const formattedMessages: Message[] = dbMessages.map((msg) => ({
+        id: msg.id,
+        text: msg.content,
+        sender: msg.sender,
+        timestamp: new Date(msg.created_at),
+      }));
+
+      setMessages(formattedMessages);
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -109,24 +184,35 @@ export default function ChatScreen() {
           throw new Error('Usuario no encontrado en Supabase');
         }
 
-        // Llamar al agente de chat
         const response = await AgentsService.sendChatMessage({
           user_id: supabaseUser.id.toString(),
           message: messageToSend,
           thread_id: threadId || undefined,
         });
 
-        // Guardar el thread_id para mantener contexto
+        let currentConversationId = conversationId;
+
         if (!threadId) {
           setThreadId(response.thread_id);
+
+          const conversation = await ChatHistoryService.createConversation(
+            supabaseUser.id,
+            response.thread_id,
+            messageToSend
+          );
+
+          currentConversationId = conversation.id;
+          setConversationId(conversation.id);
         }
 
-        // Validar que la respuesta no esté vacía
+        if (currentConversationId) {
+          await ChatHistoryService.saveMessage(currentConversationId, 'user', messageToSend);
+        }
+
         if (!response.message || response.message.trim() === '') {
           throw new Error('El agente no retornó un mensaje');
         }
 
-        // Agregar respuesta del bot
         const botResponse: Message = {
           id: Date.now() + 1,
           text: response.message,
@@ -136,14 +222,16 @@ export default function ChatScreen() {
 
         setMessages(prev => [...prev, botResponse]);
 
-        // Scroll al final
+        if (currentConversationId) {
+          await ChatHistoryService.saveMessage(currentConversationId, 'bot', response.message);
+        }
+
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: true });
         }, 100);
       } catch (error) {
         console.error('Error sending message:', error);
 
-        // Respuesta de error
         const errorResponse: Message = {
           id: Date.now() + 1,
           text: 'Lo siento, tuve un problema al procesar tu mensaje. Por favor intenta nuevamente.',
@@ -162,6 +250,23 @@ export default function ChatScreen() {
     handleSendMessage(prompt);
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInMs = now.getTime() - date.getTime();
+    const diffInHours = diffInMs / (1000 * 60 * 60);
+    const diffInDays = diffInHours / 24;
+
+    if (diffInHours < 24) {
+      return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    } else if (diffInDays < 7) {
+      const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      return days[date.getDay()];
+    } else {
+      return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -170,9 +275,8 @@ export default function ChatScreen() {
     >
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerButton}>
+        <TouchableOpacity style={styles.headerButton} onPress={handleOpenSidebar}>
           <IconSymbol name="line.3.horizontal" size={24} color="#111827" />
         </TouchableOpacity>
 
@@ -287,6 +391,103 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <Modal
+        visible={sidebarVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setSidebarVisible(false)}
+        accessible={true}
+        accessibilityViewIsModal={true}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}
+            accessible={true}
+            accessibilityLabel="Menú de conversaciones"
+          >
+            <View style={styles.sidebarHeader}>
+              <View style={styles.sidebarHeaderTitle}>
+                <IconSymbol name="bubble.left.and.bubble.right" size={24} color="#111827" />
+                <Text style={styles.sidebarTitle}>Conversaciones</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setSidebarVisible(false)}
+                accessible={true}
+                accessibilityLabel="Cerrar menú"
+                accessibilityRole="button"
+              >
+                <IconSymbol name="xmark" size={24} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.newChatButton}
+              onPress={handleNewChat}
+              accessible={true}
+              accessibilityLabel="Crear nueva conversación"
+              accessibilityRole="button"
+            >
+              <IconSymbol name="square.and.pencil" size={20} color="#FFFFFF" />
+              <Text style={styles.newChatButtonText}>Nueva conversación</Text>
+            </TouchableOpacity>
+
+            {loadingConversations ? (
+              <View style={styles.sidebarLoading}>
+                <ActivityIndicator size="large" color="#000000" />
+              </View>
+            ) : (
+              <ScrollView style={styles.conversationsList} showsVerticalScrollIndicator={false}>
+                {conversations.length === 0 ? (
+                  <View style={styles.emptyConversations}>
+                    <Text style={styles.emptyConversationsText}>
+                      No hay conversaciones guardadas
+                    </Text>
+                  </View>
+                ) : (
+                  conversations.map((conversation) => (
+                    <TouchableOpacity
+                      key={conversation.id}
+                      style={styles.conversationItem}
+                      onPress={() => handleLoadConversation(conversation)}
+                      activeOpacity={0.7}
+                      accessible={true}
+                      accessibilityLabel={`Conversación: ${conversation.title || 'Nueva conversación'}`}
+                      accessibilityHint="Toca para abrir esta conversación"
+                      accessibilityRole="button"
+                    >
+                      <View style={styles.conversationContent}>
+                        <Text style={styles.conversationTitle} numberOfLines={1}>
+                          {conversation.title || 'Nueva conversación'}
+                        </Text>
+                        {conversation.last_message && (
+                          <Text style={styles.conversationPreview} numberOfLines={2}>
+                            {conversation.last_message}
+                          </Text>
+                        )}
+                      </View>
+                      {conversation.updated_at && (
+                        <Text style={styles.conversationDate}>
+                          {formatDate(conversation.updated_at)}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </Animated.View>
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setSidebarVisible(false)}
+            accessible={true}
+            accessibilityLabel="Cerrar menú de conversaciones"
+            accessibilityRole="button"
+            importantForAccessibility="no"
+          />
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -422,9 +623,6 @@ const styles = StyleSheet.create({
   userMessageText: {
     color: '#FFFFFF',
   },
-  botMessageText: {
-    color: '#111827',
-  },
   inputContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -460,6 +658,107 @@ const styles = StyleSheet.create({
   },
   sendButtonInactive: {
     backgroundColor: 'transparent',
+  },
+  modalOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalBackdrop: {
+    flex: 1,
+  },
+  sidebar: {
+    width: '80%',
+    maxWidth: 320,
+    backgroundColor: '#FFFFFF',
+    paddingTop: 60,
+    paddingBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 2,
+      height: 0,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  sidebarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  sidebarHeaderTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sidebarTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  newChatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#000000',
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  newChatButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  sidebarLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  conversationsList: {
+    flex: 1,
+    marginTop: 16,
+  },
+  emptyConversations: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyConversationsText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  conversationItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  conversationContent: {
+    marginBottom: 4,
+  },
+  conversationTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#111827',
+    marginBottom: 4,
+  },
+  conversationPreview: {
+    fontSize: 14,
+    color: '#6B7280',
+    lineHeight: 20,
+  },
+  conversationDate: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    marginTop: 4,
   },
 });
 

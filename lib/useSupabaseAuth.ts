@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-expo';
 
 /**
@@ -8,16 +8,18 @@ import { useAuth } from '@clerk/clerk-expo';
  */
 export function useSupabaseAuth() {
   const { isSignedIn } = useAuth();
+  const lastAuthState = useRef<boolean | null>(null);
 
   useEffect(() => {
-    // Este hook está listo para integrar JWT de Clerk con Supabase
-    // cuando configures el template JWT en Clerk Dashboard
-    if (isSignedIn) {
-      // Usuario autenticado
-      console.log('✅ Usuario autenticado con Clerk');
-    } else {
-      // Usuario no autenticado
-      console.log('❌ Usuario no autenticado');
+    // Solo loguear cuando cambia el estado de autenticación
+    if (lastAuthState.current !== isSignedIn) {
+      lastAuthState.current = isSignedIn;
+
+      if (isSignedIn) {
+        console.log('✅ Usuario autenticado con Clerk');
+      } else {
+        console.log('❌ Usuario no autenticado');
+      }
     }
   }, [isSignedIn]);
 }

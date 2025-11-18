@@ -193,3 +193,22 @@ export interface UserTravelPreferences {
   created_at: string;
   updated_at: string;
 }
+
+export interface Conversation {
+  id: number;
+  user_id: number;
+  thread_id: string;
+  title: string | null;
+  last_message: string | null;
+  last_message_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Message {
+  id: number;
+  conversation_id: number;
+  sender: 'user' | 'bot';
+  content: string;
+  created_at: string;
+}

@@ -1,9 +1,30 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import { useAuth } from '@clerk/clerk-expo';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 
 export default function OnboardingScreen() {
+  const { isSignedIn, isLoaded } = useAuth();
+
+  // Mostrar loading mientras carga Clerk
+  if (!isLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#000000" />
+      </View>
+    );
+  }
+
+  // Si está autenticado, mostrar loading y dejar que _layout maneje la redirección
+  if (isSignedIn) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#000000" />
+      </View>
+    );
+  }
+
   const handleComenzar = () => {
     router.push('/cuestionario');
   };
@@ -15,7 +36,7 @@ export default function OnboardingScreen() {
         <View style={styles.content}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('@/assets/images/travel backpack with map and binoculars.png')}
+              source={require('@/assets/images/icon.png')}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -44,6 +65,12 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+  },
   container: {
     flex: 1,
     backgroundColor: '#FFFFFF',

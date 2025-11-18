@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, StatusBar, TextInput, Platfor
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser, useClerk } from '@clerk/clerk-expo';
 import { UserService } from '@/lib/userService';
 import AgentsService from '@/lib/agentsService';
 
@@ -85,6 +85,7 @@ const questions: Question[] = [
 
 export default function CuestionarioScreen() {
   const { user } = useUser();
+  const { signOut } = useClerk();
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<{ [key: number]: string | Date }>({});
   const [currentAnswer, setCurrentAnswer] = useState<string>('');
@@ -92,6 +93,25 @@ export default function CuestionarioScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(true);
+
+  // Sincronizar usuario al iniciar (especialmente para OAuth)
+  React.useEffect(() => {
+    const syncUserOnMount = async () => {
+      if (user) {
+        setSyncing(true);
+        const email = user.emailAddresses[0]?.emailAddress;
+        const name = user.firstName || user.username || undefined;
+
+        await UserService.syncClerkUser(user.id, email, name);
+        setSyncing(false);
+      } else {
+        setSyncing(false);
+      }
+    };
+
+    syncUserOnMount();
+  }, [user]);
 
   const handleTextChange = (text: string) => {
     setCurrentAnswer(text);
@@ -148,11 +168,35 @@ export default function CuestionarioScreen() {
     }
   };
 
-  const handleBack = () => {
+  const handleBack = async () => {
     if (currentQuestion > 0) {
       setCurrentQuestion(currentQuestion - 1);
       const previousAnswer = answers[questions[currentQuestion - 1].id];
       setCurrentAnswer(previousAnswer ? String(previousAnswer) : '');
+    } else {
+      Alert.alert(
+        'Salir del onboarding',
+        '¿Estás seguro que deseas salir? Deberás iniciar sesión nuevamente.',
+        [
+          {
+            text: 'Cancelar',
+            style: 'cancel'
+          },
+          {
+            text: 'Salir',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await signOut();
+                router.replace('/');
+              } catch (error) {
+                console.error('Error al cerrar sesión:', error);
+                router.replace('/');
+              }
+            }
+          }
+        ]
+      );
     }
   };
 
@@ -402,16 +446,25 @@ export default function CuestionarioScreen() {
     }
   };
 
+  if (syncing) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#000000" />
+        <Text style={styles.loadingText}>Preparando tu experiencia...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} disabled={currentQuestion === 0}>
+        <TouchableOpacity onPress={handleBack}>
           <IconSymbol
             name="chevron.left"
             size={24}
-            color={currentQuestion === 0 ? '#E5E7EB' : '#374151'}
+            color="#374151"
           />
         </TouchableOpacity>
         <Text style={styles.progressText}>
@@ -635,5 +688,17 @@ const styles = StyleSheet.create({
   optionTextSelected: {
     fontWeight: '500',
     color: '#111827',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    gap: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#6B7280',
+    marginTop: 8,
   },
 });

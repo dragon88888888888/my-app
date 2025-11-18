@@ -66,29 +66,24 @@ export class UserService {
   /**
    * Sincroniza un usuario de Clerk con Supabase
    * Crea el usuario si no existe, o lo actualiza si ya existe
+   * Maneja vinculación automática de cuentas cuando el email ya existe
    */
   static async syncClerkUser(clerkId: string, email?: string, name?: string): Promise<User | null> {
     try {
-      // Verificar si el usuario ya existe
-      const { data: existingUser, error: fetchError } = await supabase
+      // Primero verificar si ya existe un usuario con este clerk_id
+      const { data: existingByClerkId } = await supabase
         .from('users')
         .select('*')
         .eq('clerk_id', clerkId)
-        .single();
+        .maybeSingle();
 
-      if (fetchError && fetchError.code !== 'PGRST116') {
-        // PGRST116 es el código de "no se encontró"
-        console.error('Error checking existing user:', fetchError);
-        return null;
-      }
-
-      // Si el usuario existe, actualizarlo
-      if (existingUser) {
+      if (existingByClerkId) {
+        // Usuario ya existe con este clerk_id, solo actualizar
         const { data: updatedUser, error: updateError } = await supabase
           .from('users')
           .update({
-            email: email || existingUser.email,
-            name: name || existingUser.name,
+            email: email,
+            name: name,
             updated_at: new Date().toISOString()
           })
           .eq('clerk_id', clerkId)
@@ -97,19 +92,53 @@ export class UserService {
 
         if (updateError) {
           console.error('Error updating user:', updateError);
-          return null;
+          return existingByClerkId;
         }
 
         return updatedUser;
       }
 
-      // Si no existe, crear nuevo usuario
+      // Si hay email, verificar si ya existe un usuario con ese email
+      if (email) {
+        const { data: existingByEmail } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle();
+
+        if (existingByEmail) {
+          console.log(`Vinculando cuenta: Email ${email} ya existe. Actualizando clerk_id de ${existingByEmail.clerk_id} a ${clerkId}`);
+
+          // Actualizar el clerk_id del usuario existente
+          const { data: linkedUser, error: linkError } = await supabase
+            .from('users')
+            .update({
+              clerk_id: clerkId,
+              name: name || existingByEmail.name,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingByEmail.id)
+            .select()
+            .single();
+
+          if (linkError) {
+            console.error('Error vinculando cuenta:', linkError);
+            return existingByEmail;
+          }
+
+          return linkedUser;
+        }
+      }
+
+      // No existe usuario con este clerk_id ni con este email, crear nuevo
       const { data: newUser, error: insertError } = await supabase
         .from('users')
         .insert({
           clerk_id: clerkId,
           email: email,
-          name: name
+          name: name,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         })
         .select()
         .single();
@@ -347,6 +376,135 @@ export class UserService {
     } catch (error) {
       console.error('Unexpected error:', error);
       return null;
+    }
+  }
+
+  /**
+   * Verifica si el usuario ha completado el onboarding
+   */
+  static async hasCompletedOnboarding(userId: number): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .from('astral_questionnaire_responses')
+        .select('completed')
+        .eq('user_id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error checking onboarding status:', error);
+        return false;
+      }
+
+      return data?.completed || false;
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Obtiene el usuario y verifica su onboarding en una sola consulta (OPTIMIZADO)
+   * Retorna { user, hasCompletedOnboarding }
+   */
+  static async getUserWithOnboardingStatus(clerkId: string): Promise<{ user: User | null; hasCompletedOnboarding: boolean }> {
+    try {
+      // Consulta optimizada con JOIN para obtener usuario y estado de onboarding en una sola query
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          *,
+          astral_questionnaire_responses!inner(completed)
+        `)
+        .eq('clerk_id', clerkId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching user with onboarding status:', error);
+
+        // Fallback: intentar obtener solo el usuario
+        const { data: userData } = await supabase
+          .from('users')
+          .select('*')
+          .eq('clerk_id', clerkId)
+          .maybeSingle();
+
+        return {
+          user: userData,
+          hasCompletedOnboarding: false
+        };
+      }
+
+      if (!data) {
+        return {
+          user: null,
+          hasCompletedOnboarding: false
+        };
+      }
+
+      // Extraer datos del usuario sin las relaciones
+      const { astral_questionnaire_responses, ...userData } = data as any;
+
+      return {
+        user: userData as User,
+        hasCompletedOnboarding: astral_questionnaire_responses?.completed || false
+      };
+    } catch (error) {
+      console.error('Unexpected error:', error);
+      return {
+        user: null,
+        hasCompletedOnboarding: false
+      };
+    }
+  }
+
+  /**
+   * Elimina todos los datos del usuario de Supabase
+   * Esto incluye: perfil astral, preferencias de viaje, respuestas del cuestionario y el usuario
+   */
+  static async deleteUserData(clerkId: string): Promise<boolean> {
+    try {
+      // Primero obtener el usuario de Supabase
+      const user = await this.getUserByClerkId(clerkId);
+
+      if (!user) {
+        console.log('Usuario no encontrado en Supabase');
+        return true; // No hay datos que eliminar
+      }
+
+      // Eliminar perfil astral
+      await supabase
+        .from('astral_profiles')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Eliminar preferencias de viaje
+      await supabase
+        .from('user_travel_preferences')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Eliminar respuestas del cuestionario
+      await supabase
+        .from('astral_questionnaire_responses')
+        .delete()
+        .eq('user_id', user.id);
+
+      // Finalmente eliminar el usuario
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('clerk_id', clerkId);
+
+      if (error) {
+        console.error('Error eliminando usuario de Supabase:', error);
+        return false;
+      }
+
+      console.log('✅ Todos los datos del usuario eliminados de Supabase');
+      return true;
+    } catch (error) {
+      console.error('Error inesperado eliminando datos del usuario:', error);
+      return false;
     }
   }
 }

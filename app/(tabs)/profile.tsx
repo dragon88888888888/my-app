@@ -142,7 +142,7 @@ const EditableStatBar = ({
   );
 };
 
-const AstralCard = () => {
+const AstralCard = ({ imageUrl }: { imageUrl?: string }) => {
   const rotation = useSharedValue(0);
   const scale = useSharedValue(1);
 
@@ -195,7 +195,7 @@ const AstralCard = () => {
       {/* Static inner content - Profile Picture */}
       <View style={styles.astralContent}>
         <Image
-          source={{ uri: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&q=80' }}
+          source={{ uri: imageUrl || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=400&q=80' }}
           style={styles.profileImage}
           contentFit="cover"
         />
@@ -455,14 +455,14 @@ export default function ProfileScreen() {
         <View>
           <Text style={styles.title}>Tu Perfil</Text>
         </View>
-        <TouchableOpacity onPress={handleSignOut} style={styles.signOutButton}>
+        <TouchableOpacity onPress={() => router.push('/settings')} style={styles.signOutButton}>
           <IconSymbol name="gearshape.fill" size={24} color="#374151" />
         </TouchableOpacity>
       </Animated.View>
 
       <View style={styles.content}>
         {/* Astral Card */}
-        <AstralCard />
+        <AstralCard imageUrl={user?.imageUrl} />
 
         {/* Descripción del Perfil Astral */}
        

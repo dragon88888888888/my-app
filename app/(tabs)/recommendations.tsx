@@ -200,10 +200,7 @@ const loaderStyles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 3,
     borderColor: '#000000',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.15)',
     elevation: 8,
     zIndex: 10,
   },
@@ -853,8 +850,9 @@ export default function RecommendationsScreen() {
       />
 
       {/* Botón flotante "Explorar con IA" - solo renderizar cuando está visible */}
+      {/* COMENTADO: Botón que aparece al hacer scroll > 100px y se oculta automáticamente después de 15 segundos
       {showAIButton && (
-        <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle]} pointerEvents="auto">
+        <Animated.View style={[styles.floatingButtonContainer, aiButtonStyle, { pointerEvents: 'auto' }]}>
           <TouchableOpacity style={styles.aiButton} onPress={handleExploreWithAI}>
             <IconSymbol name="magnifyingglass" size={20} color="#FFFFFF" />
             <Text style={styles.aiButtonText}>Explorar Viaje con IA</Text>
@@ -862,6 +860,7 @@ export default function RecommendationsScreen() {
           </TouchableOpacity>
         </Animated.View>
       )}
+      */}
 
       {/* Loader de Carga Inicial - Overlay completo */}
       {loading && (
@@ -1033,18 +1032,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.1)',
     elevation: 4,
     overflow: 'hidden',
   },
   cardRecommended: {
     borderWidth: 2,
     borderColor: '#F59E0B',
-    shadowColor: '#F59E0B',
-    shadowOpacity: 0.2,
+    boxShadow: '0px 2px 8px rgba(245, 158, 11, 0.2)',
   },
   recommendedBadge: {
     position: 'absolute',
@@ -1158,10 +1153,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
     elevation: 8,
   },
   aiButtonText: {

@@ -1,13 +1,19 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, StatusBar, TextInput, TouchableOpacity, Alert, Image, KeyboardAvoidingView, ScrollView, Platform, Keyboard } from 'react-native';
-import { useSignIn, useAuth, useUser } from '@clerk/clerk-expo';
+import { useSignIn, useOAuth, useUser as useClerkUser } from '@clerk/clerk-expo';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { UserService } from '@/lib/userService';
 
+WebBrowser.maybeCompleteAuthSession();
+
 export default function LoginScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
-  const { signOut, isSignedIn } = useAuth();
+  const { startOAuthFlow: startGoogleOAuth } = useOAuth({ strategy: 'oauth_google' });
+  const { startOAuthFlow: startFacebookOAuth } = useOAuth({ strategy: 'oauth_facebook' });
+  const { startOAuthFlow: startAppleOAuth } = useOAuth({ strategy: 'oauth_apple' });
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,24 +21,13 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // Cerrar sesión si el usuario ya está autenticado
   useEffect(() => {
-    const handleSignOut = async () => {
-      if (isSignedIn) {
-        try {
-          await signOut();
-          console.log('✅ Sesión anterior cerrada en login');
-        } catch (error) {
-          console.error('Error al cerrar sesión anterior:', error);
-        }
-      }
+    void WebBrowser.warmUpAsync();
+    return () => {
+      void WebBrowser.coolDownAsync();
     };
-
-    handleSignOut();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-scroll cuando aparece el teclado
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
       'keyboardDidShow',
@@ -49,84 +44,71 @@ export default function LoginScreen() {
   }, []);
 
   const handleSignIn = async () => {
-    if (!isLoaded) {
-      console.log('❌ [Login] Clerk no está cargado');
-      return;
-    }
-
-    console.log('🔑 [Login] Iniciando proceso de login...');
-    console.log('  - Email:', email);
-    console.log('  - Password length:', password.length);
+    if (!isLoaded) return;
 
     setLoading(true);
     try {
-      console.log('🔑 [Login] Creando sesión con Clerk...');
-      const completeSignIn = await signIn.create({
+      const signInAttempt = await signIn.create({
         identifier: email,
         password,
       });
 
-      console.log('🔑 [Login] Respuesta de Clerk:', completeSignIn.status);
-
-      if (completeSignIn.status === 'complete') {
-        // Intentar activar la sesión, pero manejar el error si ya existe
-        try {
-          await setActive({ session: completeSignIn.createdSessionId });
-        } catch (sessionError: any) {
-          // Si ya existe una sesión, simplemente continuar
-          console.log('Session may already exist, continuing...', sessionError.message);
-        }
-
-        // IMPORTANTE: Sincronizar con Supabase ANTES de navegar
-        console.log('✅ Inicio de sesión exitoso, sincronizando con Supabase...');
-
-        const userId = completeSignIn.identifier;
-        const userEmail = email; // Ya tenemos el email del form
-
-        if (userId) {
-          const supabaseUser = await UserService.syncClerkUser(userId, userEmail);
-
-          if (supabaseUser) {
-            console.log('✅ Usuario sincronizado con Supabase:', supabaseUser.id);
-          } else {
-            console.error('❌ Error al sincronizar usuario con Supabase');
-            // No bloqueamos el login, solo advertimos
-            console.warn('Continuando sin sincronización...');
-          }
-        }
-
-        // Check if user has completed onboarding before
-        // For now, we assume existing users go directly to main app
-        const hasCompletedOnboarding = true; // Replace with actual check
-
-        if (hasCompletedOnboarding) {
-          router.replace('/(tabs)');
-        } else {
-          router.replace('/cuestionario');
-        }
+      if (signInAttempt.status === 'complete') {
+        await setActive({ session: signInAttempt.createdSessionId });
+        // Después de setActive, el usuario está autenticado y _layout.tsx manejará la navegación
+        // basándose en el estado de onboarding
       } else {
-        console.log('Sign in incomplete:', completeSignIn);
+        console.error(JSON.stringify(signInAttempt, null, 2));
       }
     } catch (err: any) {
-      console.error('Login error:', err);
+      console.error(JSON.stringify(err, null, 2));
       Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión');
     } finally {
       setLoading(false);
     }
   };
 
-  // OAuth handlers - Temporarily disabled until properly configured
   const onGoogleSignIn = useCallback(async () => {
-    Alert.alert('Google OAuth', 'Google OAuth será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, setActive: setActiveOAuth } = await startGoogleOAuth();
+
+      if (createdSessionId && setActiveOAuth) {
+        await setActiveOAuth({ session: createdSessionId });
+        // Después de setActive, el usuario está autenticado y _layout.tsx manejará la navegación
+      }
+    } catch (err: any) {
+      console.error('Error en Google OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión con Google');
+    }
+  }, [startGoogleOAuth]);
 
   const onAppleSignIn = useCallback(async () => {
-    Alert.alert('Apple OAuth', 'Apple Sign In será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, setActive: setActiveOAuth } = await startAppleOAuth();
+
+      if (createdSessionId && setActiveOAuth) {
+        await setActiveOAuth({ session: createdSessionId });
+        // Después de setActive, el usuario está autenticado y _layout.tsx manejará la navegación
+      }
+    } catch (err: any) {
+      console.error('Error en Apple OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión con Apple');
+    }
+  }, [startAppleOAuth]);
 
   const onFacebookSignIn = useCallback(async () => {
-    Alert.alert('Facebook OAuth', 'Facebook Login será configurado próximamente');
-  }, []);
+    try {
+      const { createdSessionId, setActive: setActiveOAuth } = await startFacebookOAuth();
+
+      if (createdSessionId && setActiveOAuth) {
+        await setActiveOAuth({ session: createdSessionId });
+        // Después de setActive, el usuario está autenticado y _layout.tsx manejará la navegación
+      }
+    } catch (err: any) {
+      console.error('Error en Facebook OAuth:', JSON.stringify(err, null, 2));
+      Alert.alert('Error', err.errors?.[0]?.message || 'Error al iniciar sesión con Facebook');
+    }
+  }, [startFacebookOAuth]);
 
   return (
     <KeyboardAvoidingView
